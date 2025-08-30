@@ -8,7 +8,7 @@ from datetime import datetime
 
 # Import the updated and enhanced message parser class
 # Note: Make sure the enhanced parser is saved as 'enhanced_parsing.py'
-from parsing import EnhancedMessageParser
+from enhanced_parsing import EnhancedMessageParser
 
 def main():
     st.set_page_config(
@@ -515,7 +515,7 @@ def main_app():
 if __name__ == "__main__":
     main_app()
 
-    
+
 
 
 
