@@ -51,8 +51,7 @@ class EnhancedOTPMessageParser:
             'WhatsApp': [r'\bwhatsapp\b'], 'Facebook': [r'\bfacebook\b'],
         }
 
-        # --- STRONG EXCLUSION PATTERNS (NEW & IMPROVED) ---
-        # These patterns are designed to catch common false positives.
+        # --- STRONG EXCLUSION PATTERNS ---
         self.strong_exclusion_patterns = [
             r'order\s*#\s*\w+',              # For "order #567890" or "order #ABC123"
             r'order\s*(?:number|no|id)\s*[:\s]*\w+', # For "order number", "order no", etc.
@@ -65,13 +64,13 @@ class EnhancedOTPMessageParser:
             r'promo\s*code',                # For "promo code"
         ]
 
-        # Expiry/validity patterns
+        # --- Expiry/validity patterns (IMPROVED) ---
         self.expiry_patterns = [
-            r'\bvalid\s*for\s*(\d+)\s*(minutes?|mins?|min)\b',
-            r'\bexpires?\s*in\s*(\d+)\s*(minutes?|mins?|min)\b',
+            r'\bvalid\s*(?:for|till|upto)\s*(?:the\s*)?(?:next\s*)?(\d+)\s*(minutes?|mins?|min|hours?|hrs?|hr|seconds?|secs?|sec)\b',
+            r'\bexpires?\s*(?:in|within|after)\s*(\d+)\s*(minutes?|mins?|min|hours?|hrs?|hr|seconds?|secs?|sec)\b',
         ]
 
-        # Purpose/Action patterns
+        # --- Purpose/Action patterns ---
         self.purpose_patterns = {
             'Login': [r'\bto\s*(?:login|log\s*in|sign\s*in)\b', r'\bfor\s*(?:login|log\s*in|sign\s*in)\b'],
             'Verification': [r'\bto\s*(?:verify|verification)\b', r'\bfor\s*(?:verification|account\s*verification)\b'],
@@ -79,7 +78,7 @@ class EnhancedOTPMessageParser:
             'Payment': [r'for\s*payment'],
         }
 
-        # Security warning patterns
+        # --- Security warning patterns ---
         self.security_patterns = [
             r'\bdo\s*not\s*share\b',
             r'\bnever\s*share\b', 
@@ -108,18 +107,13 @@ class EnhancedOTPMessageParser:
         for pattern in self.compiled_otp_patterns:
             match = pattern.search(text)
             if match:
-                # The OTP is in the first (and only) capture group
                 otp = match.group(1)
-                # Clean up spaces or hyphens that might be captured in some patterns
                 return re.sub(r'[- ]', '', otp)
         
-        # Fallback is now more cautious
         if any(p.search(text.lower()) for p in self.compiled_true_otp_patterns):
-            # Look for numeric codes first as they are more common
             potential_otps = re.findall(r'\b\d{4,8}\b', text)
             if potential_otps:
                 return potential_otps[0]
-            # If no numeric codes, look for alphanumeric as a last resort in a confirmed OTP message
             potential_alpha_otps = re.findall(r'\b[A-Z0-9]{4,8}\b', text)
             if potential_alpha_otps:
                  return potential_alpha_otps[0]
@@ -137,9 +131,8 @@ class EnhancedOTPMessageParser:
         score = 0
         text_lower = text.lower()
         
-        # First, check for strong exclusion patterns
         if any(p.search(text_lower) for p in self.compiled_strong_exclusions):
-            return 0 # If it's a known non-OTP format, score is 0
+            return 0
 
         otp_code = self.extract_otp_code(text)
 
@@ -168,9 +161,19 @@ class EnhancedOTPMessageParser:
         for pattern in self.compiled_expiry_patterns:
             match = pattern.search(text)
             if match:
+                unit = match.group(2).lower()
+                if unit.startswith('min'):
+                    normalized_unit = 'minute'
+                elif unit.startswith('sec'):
+                    normalized_unit = 'second'
+                elif unit.startswith('hr'):
+                    normalized_unit = 'hour'
+                else:
+                    normalized_unit = unit.rstrip('s')
+
                 return {
                     'duration': match.group(1),
-                    'unit': match.group(2).replace('s','').replace('min','minute'), # Normalize unit
+                    'unit': normalized_unit,
                     'full_text': match.group(0)
                 }
         return None
@@ -189,10 +192,9 @@ class EnhancedOTPMessageParser:
         
         confidence_score = self.calculate_otp_confidence_score(combined_text)
         
-        # A confidence score of 50 is the new threshold
         if confidence_score >= 50:
             otp_code = self.extract_otp_code(clean_message)
-            if otp_code: # Final check to ensure an OTP was actually extracted
+            if otp_code:
                 result = {
                     'status': 'parsed',
                     'confidence_score': confidence_score,

@@ -71,7 +71,6 @@ def single_message_interface(parser):
     with col2:
         st.markdown("### Quick Test Examples")
         
-        # Updated with the new, challenging examples
         st.markdown("**True OTPs (Should be Parsed)**")
         true_otp_examples = {
             "Instagram (Space)": "123 456 is your Instagram login code. Don't share it.",
@@ -107,11 +106,41 @@ def single_message_interface(parser):
             if result['status'] == 'parsed':
                 st.success(f"✅ **OTP Message Detected** (Confidence: {confidence}%)")
                 
+                # --- Main Metrics ---
                 col1, col2 = st.columns(2)
                 col1.metric("Extracted OTP", result.get('otp_code', "N/A"))
                 col2.metric("Identified Company", result.get('company_name', "Unknown"))
                 
-                with st.expander("Full Details"):
+                st.divider()
+                
+                # --- Additional Details ---
+                st.markdown("##### ℹ️ Additional Details")
+                col3, col4 = st.columns(2)
+
+                # Purpose of the OTP
+                purpose = result.get('purpose') or "General"
+                col3.metric("Purpose", purpose)
+
+                # Expiry Information
+                expiry_info = result.get('expiry_info')
+                if expiry_info:
+                    try:
+                        duration = int(expiry_info.get('duration', 0))
+                        unit = expiry_info.get('unit', 'min')
+                        plural_s = 's' if duration > 1 else ''
+                        expiry_text = f"{duration} {unit}{plural_s}"
+                    except (ValueError, TypeError):
+                        expiry_text = "Not Specified"
+                else:
+                    expiry_text = "Not Specified"
+                col4.metric("Validity", expiry_text)
+
+                # Security Warnings
+                security_warnings = result.get('security_warnings')
+                if security_warnings:
+                    st.warning(f"**Security Advice**: {', '.join(security_warnings).title()}")
+
+                with st.expander("Full Raw Output"):
                     st.json(result)
             
             else:
@@ -150,7 +179,7 @@ def csv_processing_interface(parser):
                 "Confidence Threshold", 
                 min_value=0, 
                 max_value=100, 
-                value=50, # New default threshold
+                value=50,
                 help="Minimum confidence score to classify as OTP (default: 50)"
             )
             
@@ -194,7 +223,6 @@ def csv_processing_interface(parser):
                 st.subheader("📋 Parsed OTP Messages")
                 st.dataframe(otp_df)
 
-                # Provide download link
                 csv = results_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="Download Full Results as CSV",
@@ -204,7 +232,6 @@ def csv_processing_interface(parser):
                 )
         except Exception as e:
             st.error(f"An error occurred: {e}")
-
 
 def about_page():
     st.header("ℹ️ About This Parser")
@@ -224,8 +251,6 @@ def about_page():
 
 if __name__ == "__main__":
     main()
-
-
 
 
 
