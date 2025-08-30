@@ -7,21 +7,30 @@ from difflib import SequenceMatcher
 
 class EnhancedOTPMessageParser:
     def __init__(self):
-        # --- Robust OTP Extraction Patterns ---
+        # --- Robust OTP Extraction Patterns (Updated for Alphanumeric and More Formats) ---
         self.otp_patterns = [
-            r'(?:otp|code|password)\s*is\s*[:\s]*(\d{3}[- ]?\d{3})\b',
+            # --- NEW: Alphanumeric and More Specific Patterns (Placed at the top for priority) ---
+            r'\b([A-Z0-9]{6,8})\s*is\s*your\s*(?:one\s*time\s*password|otp|code|pin)\b', # e.g., "1G24X3 is your OTP"
+            r'(?:otp|code|pin|password)\s*is\s*[:\s]*\b([A-Z0-9]{4,8})\b',             # e.g., "Your OTP is: ABC123D"
+            r'Your\s*(?:\w+\s*)?(?:code|otp|pin)\s*:\s*\b(\d{4,8})\b',                # e.g., "Your Facebook code: 123456"
+            r'verification\s*(?:code|pin)\s*is\s*\b(\d{4,8})\b',                    # e.g., "verification pin is 5678"
+            r'\b[gG]-(\d{6})\b',                                                    # Google's G-XXXXXX format
+
+            # --- EXISTING: Refined and Kept for Broad Coverage ---
+            r'(?:otp|code|password)\s*is\s*[:\s]*(\d{3}[- ]?\d{3})\b', # Handles "123 456" or "123-456" formats
             r'\b(\d{3}[- ]?\d{3})\s*is\s*your\s*(?:instagram|signal|discord)?\s*(?:login|verification|registration)?\s*code',
-            r'(?:otp|code|password|is|:)\s*(\d{4,8})\b',
-            r'\b(\d{4,8})\s*is\s*(?:your|the)\s*(?:otp|one\s*time\s*password|verification\s*code)',
+            r'\b(\d{4,8})\s*is\s*(?:your|the)\s*(?:otp|one\s*time\s*password|verification\s*code|pin)\b', # Added 'pin'
             r'enter\s*(\d{4,8})\s*to',
-            r'\b[gG]-(\d{6})\b'
+
+            # --- A slightly broader but common pattern, kept lower in priority ---
+            r'(?:otp|code|password|is|:)\s*\b(\d{4,8})\b',
         ]
 
         # --- General Keywords & Patterns for Confidence Scoring ---
         self.true_otp_patterns = [
-            r'\b(otp|one[- ]?time[- ]?password|verification code|login code|registration code)\b',
+            r'\b(otp|one[- ]?time[- ]?password|verification code|login code|registration code|pin)\b', # Added pin
             r'\b(enter\s*[\d-]+)\b',
-            r'(\d{4,8})\s*is\s*your',
+            r'(\w{4,8})\s*is\s*your', # Now alphanumeric
             r'valid\s*for\s*\d+\s*minutes'
         ]
         
@@ -45,9 +54,9 @@ class EnhancedOTPMessageParser:
         # --- STRONG EXCLUSION PATTERNS (NEW & IMPROVED) ---
         # These patterns are designed to catch common false positives.
         self.strong_exclusion_patterns = [
-            r'order\s*#\s*\d+',              # For "order #567890"
+            r'order\s*#\s*\w+',              # For "order #567890" or "order #ABC123"
             r'order\s*(?:number|no|id)\s*[:\s]*\w+', # For "order number", "order no", etc.
-            r'use\s*code\s*[A-Z]+\d+',       # For "Use code SAVE50"
+            r'use\s*code\s*[A-Z]{4,}\d*',       # For "Use code SAVE50", avoid matching OTPs like "1G24X3"
             r'account\s*balance',           # For "Your account balance is..."
             r'bal\s*:\s*rs',                # For "bal: rs..."
             r'tracking\s*number',           # For "tracking number"
@@ -99,13 +108,21 @@ class EnhancedOTPMessageParser:
         for pattern in self.compiled_otp_patterns:
             match = pattern.search(text)
             if match:
-                return re.sub(r'[- ]', '', match.group(1))
+                # The OTP is in the first (and only) capture group
+                otp = match.group(1)
+                # Clean up spaces or hyphens that might be captured in some patterns
+                return re.sub(r'[- ]', '', otp)
         
         # Fallback is now more cautious
         if any(p.search(text.lower()) for p in self.compiled_true_otp_patterns):
+            # Look for numeric codes first as they are more common
             potential_otps = re.findall(r'\b\d{4,8}\b', text)
             if potential_otps:
                 return potential_otps[0]
+            # If no numeric codes, look for alphanumeric as a last resort in a confirmed OTP message
+            potential_alpha_otps = re.findall(r'\b[A-Z0-9]{4,8}\b', text)
+            if potential_alpha_otps:
+                 return potential_alpha_otps[0]
 
         return None
 
@@ -153,7 +170,7 @@ class EnhancedOTPMessageParser:
             if match:
                 return {
                     'duration': match.group(1),
-                    'unit': match.group(2),
+                    'unit': match.group(2).replace('s','').replace('min','minute'), # Normalize unit
                     'full_text': match.group(0)
                 }
         return None
@@ -263,9 +280,9 @@ class EnhancedOTPMessageParser:
                 'total_input_messages': int(total_messages),
                 'otp_messages_found': len(otp_messages),
                 'rejected_messages': len(rejected_messages),
-                'otp_detection_rate': round((len(otp_messages) / total_messages) * 100, 2),
+                'otp_detection_rate': round((len(otp_messages) / total_messages) * 100, 2) if total_messages > 0 else 0,
                 'processing_time_minutes': round(parse_time / 60, 2),
-                'parser_version': '4.0_high_precision'
+                'parser_version': '5.0_alphanumeric_support'
             },
             'summary_statistics': self.generate_summary_stats(otp_messages),
             'otp_messages': otp_messages,
@@ -346,9 +363,12 @@ class EnhancedOTPMessageParser:
         print("TOP COMPANIES/SERVICES")
         print("="*60)
         
-        for company, count in list(distributions.get('top_companies', {}).items())[:10]:
-            percentage = (count / metadata['otp_messages_found']) * 100
-            print(f"{company}: {count:,} ({percentage:.1f}%)")
+        if distributions.get('top_companies'):
+            for company, count in list(distributions.get('top_companies', {}).items())[:10]:
+                percentage = (count / metadata['otp_messages_found']) * 100
+                print(f"{company}: {count:,} ({percentage:.1f}%)")
+        else:
+            print("No companies identified.")
         
         print("\n" + "="*60)
         print("QUALITY METRICS")
@@ -359,11 +379,18 @@ class EnhancedOTPMessageParser:
     def test_enhanced_parser(self):
         """A comprehensive test suite to validate parser accuracy."""
         test_cases = [
-            # False Positives (Should be REJECTED)
+            # --- NEW: Test cases for updated patterns ---
+            ("1G24X3 is your OTP. Please do not share this code with anyone else. WMSSPL", "1G24X3"), # Alphanumeric
+            ("Your Swiggy code: 5678. It will expire in 10 minutes.", "5678"), # "code:" format
+            ("Your verification pin is 990011 for transaction.", "990011"), # "pin is" format
+            ("Your one time password is: AB34CD56", "AB34CD56"), # Alphanumeric with "is:"
+
+            # --- Existing False Positives (Should be REJECTED) ---
             ("Thank you for your order #567890 from Zomato.", None),
             ("Flash Sale! Get 50% off on orders above Rs. 1500. Use code SAVE50.", None),
             ("Your account balance is INR 12,345.67 as of 29-Aug-2025.", None),
-            # True Positives (Should be PARSED)
+
+            # --- Existing True Positives (Should be PARSED) ---
             ("OTP for Aarogya Setu is 1357. Stay safe.", "1357"),
             ("Your Discord verification code is 887766", "887766"),
             ("Your Signal registration code is 246-810.", "246810"),
@@ -388,7 +415,7 @@ class EnhancedOTPMessageParser:
             
             print(f"\nTest {i+1}: {status}")
             print(f"  Message: '{message}'")
-            print(f"  Result: {result.get('status')}, OTP: {result.get('otp_code')}, Score: {result.get('confidence_score')}%")
+            print(f"  Result: {result.get('status')}, OTP: {result.get('otp_code')}, Score: {result.get('confidence_score')}")
             
         print(f"\n--- Test Complete: {correct_count}/{len(test_cases)} Passed ---")
 
@@ -457,7 +484,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
