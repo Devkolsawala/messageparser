@@ -31,15 +31,15 @@ def main():
     st.sidebar.title("Navigation")
     mode = st.sidebar.radio(
         "Choose analysis mode:",
-        ["Single Message Analysis", "CSV File Processing", "Missing Pattern Tests", "About"]
+        ["Single Message Analysis", "CSV File Processing",  "About"]
     )
     
     if mode == "Single Message Analysis":
         single_message_interface(parser)
     elif mode == "CSV File Processing":
         csv_processing_interface(parser)
-    elif mode == "Missing Pattern Tests":
-        missing_pattern_tests(parser)
+    # elif mode == "Missing Pattern Tests":
+    #     missing_pattern_tests(parser)
     elif mode == "About":
         about_page()
 
@@ -101,102 +101,102 @@ def single_message_interface(parser):
                 with st.expander("Message Preview"):
                     st.text(result.get('message_preview'))
 
-def missing_pattern_tests(parser):
-    """Test interface specifically for the missing patterns reported by user"""
-    st.header("🔬 Missing Pattern Tests")
-    st.markdown("Test the enhanced parser against the specific examples that were previously failing.")
+# def missing_pattern_tests(parser):
+#     """Test interface specifically for the missing patterns reported by user"""
+#     st.header("🔬 Missing Pattern Tests")
+#     st.markdown("Test the enhanced parser against the specific examples that were previously failing.")
     
-    st.info("These are the exact messages that were not being detected properly in the previous version.")
+#     st.info("These are the exact messages that were not being detected properly in the previous version.")
     
-    # The exact missing examples from user
-    missing_examples = [
-        {
-            "title": "Maharashtra Police + Sama.live",
-            "message": "Maharashtra Police invites you to pay your Traffic Challan through the Online Lok Adalat, via Sama. Click here: https://sama.live/mnotice.php?caseid=MH41AW2969",
-            "expected": {
-                "traffic_authority": "Maharashtra Police",
-                "payment_link": "https://sama.live/mnotice.php?caseid=MH41AW2969",
-                "challan_status": "pending"
-            },
-            "issue": "Failed to identify Maharashtra Police authority and Sama.live platform"
-        },
-        {
-            "title": "Short Challan Number",
-            "message": "Traffic violations by your Vehicle No.: HR87K5231 found actionable vide challan No.57527311. Click https://vcourts.gov.in and select department NOTICE BRANCH DELHI TRAFFIC D to see details and may pay fine of Rs.1000.00 DDCSMS",
-            "expected": {
-                "challan_number": "57527311",
-                "vehicle_number": "HR87K5231",
-                "fine_amount": "1000.00",
-                "traffic_authority": "Delhi Traffic Police"
-            },
-            "issue": "Failed to identify short numeric challan number (8 digits)"
-        },
-        {
-            "title": "Issued Against Pattern 1",
-            "message": "A challan HR67070221005165119 issued against HR51BM6192. The total challan amount is 500. For more details visit: https://bit.ly/2UZK16l. Thanks, Faridabad Traffic Police.",
-            "expected": {
-                "challan_number": "HR67070221005165119",
-                "vehicle_number": "HR51BM6192",
-                "fine_amount": "500",
-                "traffic_authority": "Faridabad Traffic Police"
-            },
-            "issue": "Failed to extract vehicle number from 'issued against' pattern"
-        },
-        {
-            "title": "Issued Against Pattern 2",
-            "message": "A challan GJ4160807230909053094 issued against GJ05RK8881. The total challan amount is 500. For more details visit: https://bit.ly/2UZK16l. Thanks, Surat City Traffic Police.",
-            "expected": {
-                "challan_number": "GJ4160807230909053094",
-                "vehicle_number": "GJ05RK8881",
-                "fine_amount": "500",
-                "traffic_authority": "Surat City Traffic Police"
-            },
-            "issue": "Failed to extract vehicle number and authority"
-        }
-    ]
+#     # The exact missing examples from user
+#     missing_examples = [
+#         {
+#             "title": "Maharashtra Police + Sama.live",
+#             "message": "Maharashtra Police invites you to pay your Traffic Challan through the Online Lok Adalat, via Sama. Click here: https://sama.live/mnotice.php?caseid=MH41AW2969",
+#             "expected": {
+#                 "traffic_authority": "Maharashtra Police",
+#                 "payment_link": "https://sama.live/mnotice.php?caseid=MH41AW2969",
+#                 "challan_status": "pending"
+#             },
+#             "issue": "Failed to identify Maharashtra Police authority and Sama.live platform"
+#         },
+#         {
+#             "title": "Short Challan Number",
+#             "message": "Traffic violations by your Vehicle No.: HR87K5231 found actionable vide challan No.57527311. Click https://vcourts.gov.in and select department NOTICE BRANCH DELHI TRAFFIC D to see details and may pay fine of Rs.1000.00 DDCSMS",
+#             "expected": {
+#                 "challan_number": "57527311",
+#                 "vehicle_number": "HR87K5231",
+#                 "fine_amount": "1000.00",
+#                 "traffic_authority": "Delhi Traffic Police"
+#             },
+#             "issue": "Failed to identify short numeric challan number (8 digits)"
+#         },
+#         {
+#             "title": "Issued Against Pattern 1",
+#             "message": "A challan HR67070221005165119 issued against HR51BM6192. The total challan amount is 500. For more details visit: https://bit.ly/2UZK16l. Thanks, Faridabad Traffic Police.",
+#             "expected": {
+#                 "challan_number": "HR67070221005165119",
+#                 "vehicle_number": "HR51BM6192",
+#                 "fine_amount": "500",
+#                 "traffic_authority": "Faridabad Traffic Police"
+#             },
+#             "issue": "Failed to extract vehicle number from 'issued against' pattern"
+#         },
+#         {
+#             "title": "Issued Against Pattern 2",
+#             "message": "A challan GJ4160807230909053094 issued against GJ05RK8881. The total challan amount is 500. For more details visit: https://bit.ly/2UZK16l. Thanks, Surat City Traffic Police.",
+#             "expected": {
+#                 "challan_number": "GJ4160807230909053094",
+#                 "vehicle_number": "GJ05RK8881",
+#                 "fine_amount": "500",
+#                 "traffic_authority": "Surat City Traffic Police"
+#             },
+#             "issue": "Failed to extract vehicle number and authority"
+#         }
+#     ]
     
-    st.markdown("### Test Results")
+#     st.markdown("### Test Results")
     
-    for i, example in enumerate(missing_examples):
-        with st.expander(f"Test {i+1}: {example['title']}", expanded=True):
-            st.markdown(f"**Previous Issue**: {example['issue']}")
-            st.markdown(f"**Message**: {example['message']}")
+#     for i, example in enumerate(missing_examples):
+#         with st.expander(f"Test {i+1}: {example['title']}", expanded=True):
+#             st.markdown(f"**Previous Issue**: {example['issue']}")
+#             st.markdown(f"**Message**: {example['message']}")
             
-            # Test the message
-            result = parser.parse_single_message(example['message'], "", "challan")
+#             # Test the message
+#             result = parser.parse_single_message(example['message'], "", "challan")
             
-            if result['status'] == 'parsed':
-                st.success(f"✅ **FIXED** - Now detects as challan (Confidence: {result['confidence_score']}%)")
+#             if result['status'] == 'parsed':
+#                 st.success(f"✅ **FIXED** - Now detects as challan (Confidence: {result['confidence_score']}%)")
                 
-                # Check specific fields
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("**Extracted Data:**")
-                    for field in ['challan_number', 'vehicle_number', 'fine_amount', 'traffic_authority', 'payment_link']:
-                        value = result.get(field)
-                        if value:
-                            st.text(f"{field}: {value}")
+#                 # Check specific fields
+#                 col1, col2 = st.columns(2)
+#                 with col1:
+#                     st.markdown("**Extracted Data:**")
+#                     for field in ['challan_number', 'vehicle_number', 'fine_amount', 'traffic_authority', 'payment_link']:
+#                         value = result.get(field)
+#                         if value:
+#                             st.text(f"{field}: {value}")
                 
-                with col2:
-                    st.markdown("**Expected vs Actual:**")
-                    all_correct = True
-                    for field, expected_value in example['expected'].items():
-                        actual_value = result.get(field)
-                        if actual_value == expected_value:
-                            st.success(f"✅ {field}: {actual_value}")
-                        else:
-                            st.error(f"❌ {field}: Got '{actual_value}', Expected '{expected_value}'")
-                            all_correct = False
+#                 with col2:
+#                     st.markdown("**Expected vs Actual:**")
+#                     all_correct = True
+#                     for field, expected_value in example['expected'].items():
+#                         actual_value = result.get(field)
+#                         if actual_value == expected_value:
+#                             st.success(f"✅ {field}: {actual_value}")
+#                         else:
+#                             st.error(f"❌ {field}: Got '{actual_value}', Expected '{expected_value}'")
+#                             all_correct = False
                     
-                    if all_correct:
-                        st.success("🎉 **ALL FIELDS CORRECT**")
-                    else:
-                        st.warning("⚠️ Some fields need adjustment")
-            else:
-                st.error(f"❌ **STILL FAILING** - Not detected as challan (Confidence: {result['confidence_score']}%)")
-                st.text(f"Reason: {result.get('reason')}")
+#                     if all_correct:
+#                         st.success("🎉 **ALL FIELDS CORRECT**")
+#                     else:
+#                         st.warning("⚠️ Some fields need adjustment")
+#             else:
+#                 st.error(f"❌ **STILL FAILING** - Not detected as challan (Confidence: {result['confidence_score']}%)")
+#                 st.text(f"Reason: {result.get('reason')}")
     
-    # Run automated test
+#     # Run automated test
     if st.button("🚀 Run Full Automated Test Suite"):
         with st.spinner("Running comprehensive tests..."):
             st.markdown("### Automated Test Results")
