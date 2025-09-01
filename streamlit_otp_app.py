@@ -31,17 +31,14 @@ def main():
     st.sidebar.title("Navigation")
     mode = st.sidebar.radio(
         "Choose analysis mode:",
-        ["Single Message Analysis", "CSV File Processing",  "About"]
+        ["Single Message Analysis", "CSV File Processing"]
     )
     
     if mode == "Single Message Analysis":
         single_message_interface(parser)
     elif mode == "CSV File Processing":
         csv_processing_interface(parser)
-    # elif mode == "Missing Pattern Tests":
-    #     missing_pattern_tests(parser)
-    elif mode == "About":
-        about_page()
+  
 
 def single_message_interface(parser):
     st.header("📱 Single Message Analysis")
@@ -101,102 +98,7 @@ def single_message_interface(parser):
                 with st.expander("Message Preview"):
                     st.text(result.get('message_preview'))
 
-# def missing_pattern_tests(parser):
-#     """Test interface specifically for the missing patterns reported by user"""
-#     st.header("🔬 Missing Pattern Tests")
-#     st.markdown("Test the enhanced parser against the specific examples that were previously failing.")
-    
-#     st.info("These are the exact messages that were not being detected properly in the previous version.")
-    
-#     # The exact missing examples from user
-#     missing_examples = [
-#         {
-#             "title": "Maharashtra Police + Sama.live",
-#             "message": "Maharashtra Police invites you to pay your Traffic Challan through the Online Lok Adalat, via Sama. Click here: https://sama.live/mnotice.php?caseid=MH41AW2969",
-#             "expected": {
-#                 "traffic_authority": "Maharashtra Police",
-#                 "payment_link": "https://sama.live/mnotice.php?caseid=MH41AW2969",
-#                 "challan_status": "pending"
-#             },
-#             "issue": "Failed to identify Maharashtra Police authority and Sama.live platform"
-#         },
-#         {
-#             "title": "Short Challan Number",
-#             "message": "Traffic violations by your Vehicle No.: HR87K5231 found actionable vide challan No.57527311. Click https://vcourts.gov.in and select department NOTICE BRANCH DELHI TRAFFIC D to see details and may pay fine of Rs.1000.00 DDCSMS",
-#             "expected": {
-#                 "challan_number": "57527311",
-#                 "vehicle_number": "HR87K5231",
-#                 "fine_amount": "1000.00",
-#                 "traffic_authority": "Delhi Traffic Police"
-#             },
-#             "issue": "Failed to identify short numeric challan number (8 digits)"
-#         },
-#         {
-#             "title": "Issued Against Pattern 1",
-#             "message": "A challan HR67070221005165119 issued against HR51BM6192. The total challan amount is 500. For more details visit: https://bit.ly/2UZK16l. Thanks, Faridabad Traffic Police.",
-#             "expected": {
-#                 "challan_number": "HR67070221005165119",
-#                 "vehicle_number": "HR51BM6192",
-#                 "fine_amount": "500",
-#                 "traffic_authority": "Faridabad Traffic Police"
-#             },
-#             "issue": "Failed to extract vehicle number from 'issued against' pattern"
-#         },
-#         {
-#             "title": "Issued Against Pattern 2",
-#             "message": "A challan GJ4160807230909053094 issued against GJ05RK8881. The total challan amount is 500. For more details visit: https://bit.ly/2UZK16l. Thanks, Surat City Traffic Police.",
-#             "expected": {
-#                 "challan_number": "GJ4160807230909053094",
-#                 "vehicle_number": "GJ05RK8881",
-#                 "fine_amount": "500",
-#                 "traffic_authority": "Surat City Traffic Police"
-#             },
-#             "issue": "Failed to extract vehicle number and authority"
-#         }
-#     ]
-    
-#     st.markdown("### Test Results")
-    
-#     for i, example in enumerate(missing_examples):
-#         with st.expander(f"Test {i+1}: {example['title']}", expanded=True):
-#             st.markdown(f"**Previous Issue**: {example['issue']}")
-#             st.markdown(f"**Message**: {example['message']}")
-            
-#             # Test the message
-#             result = parser.parse_single_message(example['message'], "", "challan")
-            
-#             if result['status'] == 'parsed':
-#                 st.success(f"✅ **FIXED** - Now detects as challan (Confidence: {result['confidence_score']}%)")
-                
-#                 # Check specific fields
-#                 col1, col2 = st.columns(2)
-#                 with col1:
-#                     st.markdown("**Extracted Data:**")
-#                     for field in ['challan_number', 'vehicle_number', 'fine_amount', 'traffic_authority', 'payment_link']:
-#                         value = result.get(field)
-#                         if value:
-#                             st.text(f"{field}: {value}")
-                
-#                 with col2:
-#                     st.markdown("**Expected vs Actual:**")
-#                     all_correct = True
-#                     for field, expected_value in example['expected'].items():
-#                         actual_value = result.get(field)
-#                         if actual_value == expected_value:
-#                             st.success(f"✅ {field}: {actual_value}")
-#                         else:
-#                             st.error(f"❌ {field}: Got '{actual_value}', Expected '{expected_value}'")
-#                             all_correct = False
-                    
-#                     if all_correct:
-#                         st.success("🎉 **ALL FIELDS CORRECT**")
-#                     else:
-#                         st.warning("⚠️ Some fields need adjustment")
-#             else:
-#                 st.error(f"❌ **STILL FAILING** - Not detected as challan (Confidence: {result['confidence_score']}%)")
-#                 st.text(f"Reason: {result.get('reason')}")
-    
-#     # Run automated test
+
     if st.button("🚀 Run Full Automated Test Suite"):
         with st.spinner("Running comprehensive tests..."):
             st.markdown("### Automated Test Results")
@@ -629,112 +531,7 @@ def csv_processing_interface(parser):
             st.error(f"An error occurred: {e}")
             st.error("Please check your CSV format and try again.")
 
-def about_page():
-    st.header("ℹ️ About Enhanced Parser v8.0")
-    st.markdown("""
-    This enhanced parser combines **OTP detection**, **EMI reminder parsing**, and **Traffic Challan parsing** capabilities with advanced pattern matching and confidence scoring.
 
-    ### 🆕 What's NEW in v8.0:
-    
-    **MISSING PATTERN FIXES:**
-    - **Maharashtra Police**: Now properly detects messages from Maharashtra Police
-    - **Sama.live Integration**: Recognizes Online Lok Adalat via Sama platform
-    - **Short Challan Numbers**: Supports 8+ digit numeric challans (e.g., "57527311")
-    - **"Issued Against" Patterns**: Detects vehicle numbers in "issued against HR51BM6192" format
-    - **Enhanced Fine Detection**: Better extraction of amounts without "Rs." prefix
-    - **Multi-State Authorities**: Added Faridabad Traffic Police, Surat City Traffic Police
-    
-    ### 🎯 Fixed User-Reported Issues:
-    
-    1. **Maharashtra Police + Sama.live**: 
-       - "Maharashtra Police invites you to pay your Traffic Challan through the Online Lok Adalat, via Sama"
-       - Now detects authority and payment platform correctly
-    
-    2. **Short Challan Numbers**:
-       - "vide challan No.57527311" - now captures 8-digit numeric challans
-       - Previously only worked with longer alphanumeric formats
-    
-    3. **Vehicle Number Extraction**:
-       - "issued against HR51BM6192" - now properly extracts vehicle numbers
-       - "issued against GJ05RK8881" - supports multiple states
-    
-    4. **Enhanced Fine Amount Detection**:
-       - "The total challan amount is 500" - works without "Rs." prefix
-       - "fine of Rs.1000.00 DDCSMS" - handles trailing identifiers
-    
-    ### 📊 Enhanced Detection Features:
-    - **Lower Confidence Threshold**: Reduced to 40% for better challan detection
-    - **Multi-Format Challan Numbers**: Traditional, short numeric, and reference formats
-    - **Enhanced Authority Recognition**: 12+ traffic authorities and government systems
-    - **Improved Vehicle Patterns**: Multiple extraction patterns for Indian number plates
-    - **Payment Status Tracking**: Distinguishes issued, pending, and paid challans
-    
-    ### 🚦 Supported Message Formats:
-    
-    **Traditional Challans:**
-    - "challan bearing No. DL116709240411110024"
-    - "vide challan No.GJ205426240326183155"
-    
-    **Short Numeric Challans:**
-    - "vide challan No.57527311"
-    - "challan 12345678"
-    
-    **Issued Against Patterns:**
-    - "A challan HR67070221005165119 issued against HR51BM6192"
-    - "challan GJ4160807230909053094 issued against GJ05RK8881"
-    
-    **Online Platforms:**
-    - "Online Lok Adalat, via Sama"
-    - "Click here: https://sama.live/mnotice.php"
-    
-    ### 🏛️ Government Integration:
-    - **Maharashtra Police** - Online Lok Adalat system
-    - **Sama.live** - Digital payment platform
-    - **Multiple State Traffic Police** - Delhi, Faridabad, Surat, etc.
-    - **Virtual Courts** - Enhanced court system recognition
-    - **iFMS & MP Treasury** - Government payment systems
-    
-    ### ✅ Quality Improvements:
-    - **Enhanced Regex Patterns**: More comprehensive pattern matching
-    - **Better Validation**: Improved challan number and vehicle number validation
-    - **Multi-State Support**: Handles various state challan formats
-    - **Payment Platform Recognition**: Detects modern digital payment systems
-    
-    ### 🔧 Technical Enhancements:
-    - **40+ New Regex Patterns**: Added for missing message types
-    - **Enhanced Auto-Detection**: Better logic for message type classification
-    - **Improved Confidence Scoring**: More accurate assessment of message validity
-    - **Robust Error Handling**: Better handling of edge cases and malformed data
-    """)
-    
-    st.subheader("🚦 Enhanced Pattern Examples")
-    
-    with st.expander("NEW Pattern Support Examples"):
-        st.code("""
-        FIXED PATTERNS:
-        
-        1. Maharashtra Police + Sama.live:
-        "Maharashtra Police invites you to pay your Traffic Challan through 
-         the Online Lok Adalat, via Sama. Click here: https://sama.live/..."
-        
-        2. Short Numeric Challans:
-        "vide challan No.57527311" (8 digits)
-        "challan No.12345678"
-        
-        3. Issued Against Vehicle:
-        "A challan HR67070221005165119 issued against HR51BM6192"
-        "challan GJ4160807230909053094 issued against GJ05RK8881"
-        
-        4. Enhanced Fine Detection:
-        "The total challan amount is 500"
-        "fine of Rs.1000.00 DDCSMS"
-        
-        5. Multi-State Authorities:
-        "Thanks, Faridabad Traffic Police"
-        "Thanks, Surat City Traffic Police"
-        """)
-    
-    st.success("🎉 **v8.0 Status**: All user-reported missing patterns have been addressed and tested!")
 
 def main_app():
     main()
