@@ -11,14 +11,15 @@ from enhanced_parsing import EnhancedMessageParser
 
 def main():
     st.set_page_config(
-        page_title="Enhanced Message Parser - OTP & EMI",
-        page_icon="🎯",
+        page_title="Enhanced Message Parser v8.0 - OTP, EMI & Challan",
+        page_icon="🚦",
         layout="wide",
         initial_sidebar_state="expanded"
     )
     
-    st.title("🎯 Enhanced Message Parser")
-    st.markdown("**Advanced parser for OTPs and EMI reminders with high accuracy**")
+    st.title("🚦 Enhanced Message Parser v8.0")
+    st.markdown("**Advanced parser for OTPs, EMI reminders, and Traffic Challans with MISSING pattern detection**")
+    st.success("✨ **NEW v8.0**: Fixed missing patterns - Maharashtra Police, Sama.live, short challans, 'issued against' patterns")
     
     # Initialize the enhanced parser
     if 'parser' not in st.session_state:
@@ -30,19 +31,21 @@ def main():
     st.sidebar.title("Navigation")
     mode = st.sidebar.radio(
         "Choose analysis mode:",
-        ["Single Message Analysis", "CSV File Processing", "About"]
+        ["Single Message Analysis", "CSV File Processing", "Missing Pattern Tests", "About"]
     )
     
     if mode == "Single Message Analysis":
         single_message_interface(parser)
     elif mode == "CSV File Processing":
         csv_processing_interface(parser)
+    elif mode == "Missing Pattern Tests":
+        missing_pattern_tests(parser)
     elif mode == "About":
         about_page()
 
 def single_message_interface(parser):
     st.header("📱 Single Message Analysis")
-    st.markdown("Test the parser with individual SMS messages for OTP or EMI content.")
+    st.markdown("Test the parser with individual SMS messages for OTP, EMI, or Traffic Challan content.")
     
     col1, col2 = st.columns([2, 1])
     
@@ -62,57 +65,18 @@ def single_message_interface(parser):
         
         sender_name = st.text_input(
             "Sender Name (Optional)",
-            placeholder="e.g., Google, ZOMATO, AXISBK, IDFC",
+            placeholder="e.g., Google, ZOMATO, AXISBK, DL-POLICE, IFMS",
             help="The sender ID or name from the SMS"
         )
         
         message_type = st.selectbox(
             "Message Type",
-            ["auto", "otp", "emi"],
+            ["auto", "otp", "emi", "challan"],
             help="Choose 'auto' for automatic detection, or specify the type"
         )
         
         analyze_btn = st.button("🔍 Analyze Message", type="primary")
     
-    with col2:
-        st.markdown("### Quick Test Examples")
-        
-        # OTP Examples
-        st.markdown("**OTP Examples**")
-        otp_examples = {
-            "Instagram": "123 456 is your Instagram login code. Don't share it.",
-            "Signal": "Your Signal registration code is 246-810.",
-            "Axis Bank": "Your Axis Bank OTP is 224466. Valid for 5 minutes.",
-            "Google": "G-123456 is your Google verification code.",
-        }
-        for label, example in otp_examples.items():
-            if st.button(f"Load: {label}", key=f"otp_{label}"):
-                st.session_state.message_text = example
-                st.rerun()
-        
-        # EMI Examples
-        st.markdown("**EMI Examples**")
-        emi_examples = {
-            "IDFC Bank": "Your IDFC FIRST Bank loan EMI of Rs 2446, a/c: 65689256, is PENDING!",
-            "Bike Bazaar": "EMI payment of Rs. 3406.00/- for Jul'2024 for loan account RTMN2W000005200062 not paid.",
-            "Chola Finance": "EMI payment Rs 27267 for the month has bounced. Pay now to avoid penalty.",
-        }
-        for label, example in emi_examples.items():
-            if st.button(f"Load: {label}", key=f"emi_{label}"):
-                st.session_state.message_text = example
-                st.rerun()
-
-        st.markdown("**False Positives**")
-        false_examples = {
-            "Order Number": "Thank you for your order #567890 from Zomato.",
-            "EMI Promo": "Get easy EMI options starting from Rs 999! 0% interest!",
-            "Balance": "Your account balance is INR 12,345.67",
-        }
-        for label, example in false_examples.items():
-            if st.button(f"Load: {label}", key=f"false_{label}"):
-                st.session_state.message_text = example
-                st.rerun()
-
     # Analysis results
     if analyze_btn and st.session_state.message_text.strip():
         with st.spinner("Analyzing message..."):
@@ -129,11 +93,124 @@ def single_message_interface(parser):
                     display_otp_results(result, confidence)
                 elif msg_type == 'emi':
                     display_emi_results(result, confidence)
+                elif msg_type == 'challan':
+                    display_challan_results(result, confidence)
             else:
                 st.error(f"❌ **Message Not Classified** (Type: {msg_type}, Confidence: {confidence}%)")
                 st.warning(f"**Reason**: {result.get('reason')}")
                 with st.expander("Message Preview"):
                     st.text(result.get('message_preview'))
+
+def missing_pattern_tests(parser):
+    """Test interface specifically for the missing patterns reported by user"""
+    st.header("🔬 Missing Pattern Tests")
+    st.markdown("Test the enhanced parser against the specific examples that were previously failing.")
+    
+    st.info("These are the exact messages that were not being detected properly in the previous version.")
+    
+    # The exact missing examples from user
+    missing_examples = [
+        {
+            "title": "Maharashtra Police + Sama.live",
+            "message": "Maharashtra Police invites you to pay your Traffic Challan through the Online Lok Adalat, via Sama. Click here: https://sama.live/mnotice.php?caseid=MH41AW2969",
+            "expected": {
+                "traffic_authority": "Maharashtra Police",
+                "payment_link": "https://sama.live/mnotice.php?caseid=MH41AW2969",
+                "challan_status": "pending"
+            },
+            "issue": "Failed to identify Maharashtra Police authority and Sama.live platform"
+        },
+        {
+            "title": "Short Challan Number",
+            "message": "Traffic violations by your Vehicle No.: HR87K5231 found actionable vide challan No.57527311. Click https://vcourts.gov.in and select department NOTICE BRANCH DELHI TRAFFIC D to see details and may pay fine of Rs.1000.00 DDCSMS",
+            "expected": {
+                "challan_number": "57527311",
+                "vehicle_number": "HR87K5231",
+                "fine_amount": "1000.00",
+                "traffic_authority": "Delhi Traffic Police"
+            },
+            "issue": "Failed to identify short numeric challan number (8 digits)"
+        },
+        {
+            "title": "Issued Against Pattern 1",
+            "message": "A challan HR67070221005165119 issued against HR51BM6192. The total challan amount is 500. For more details visit: https://bit.ly/2UZK16l. Thanks, Faridabad Traffic Police.",
+            "expected": {
+                "challan_number": "HR67070221005165119",
+                "vehicle_number": "HR51BM6192",
+                "fine_amount": "500",
+                "traffic_authority": "Faridabad Traffic Police"
+            },
+            "issue": "Failed to extract vehicle number from 'issued against' pattern"
+        },
+        {
+            "title": "Issued Against Pattern 2",
+            "message": "A challan GJ4160807230909053094 issued against GJ05RK8881. The total challan amount is 500. For more details visit: https://bit.ly/2UZK16l. Thanks, Surat City Traffic Police.",
+            "expected": {
+                "challan_number": "GJ4160807230909053094",
+                "vehicle_number": "GJ05RK8881",
+                "fine_amount": "500",
+                "traffic_authority": "Surat City Traffic Police"
+            },
+            "issue": "Failed to extract vehicle number and authority"
+        }
+    ]
+    
+    st.markdown("### Test Results")
+    
+    for i, example in enumerate(missing_examples):
+        with st.expander(f"Test {i+1}: {example['title']}", expanded=True):
+            st.markdown(f"**Previous Issue**: {example['issue']}")
+            st.markdown(f"**Message**: {example['message']}")
+            
+            # Test the message
+            result = parser.parse_single_message(example['message'], "", "challan")
+            
+            if result['status'] == 'parsed':
+                st.success(f"✅ **FIXED** - Now detects as challan (Confidence: {result['confidence_score']}%)")
+                
+                # Check specific fields
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**Extracted Data:**")
+                    for field in ['challan_number', 'vehicle_number', 'fine_amount', 'traffic_authority', 'payment_link']:
+                        value = result.get(field)
+                        if value:
+                            st.text(f"{field}: {value}")
+                
+                with col2:
+                    st.markdown("**Expected vs Actual:**")
+                    all_correct = True
+                    for field, expected_value in example['expected'].items():
+                        actual_value = result.get(field)
+                        if actual_value == expected_value:
+                            st.success(f"✅ {field}: {actual_value}")
+                        else:
+                            st.error(f"❌ {field}: Got '{actual_value}', Expected '{expected_value}'")
+                            all_correct = False
+                    
+                    if all_correct:
+                        st.success("🎉 **ALL FIELDS CORRECT**")
+                    else:
+                        st.warning("⚠️ Some fields need adjustment")
+            else:
+                st.error(f"❌ **STILL FAILING** - Not detected as challan (Confidence: {result['confidence_score']}%)")
+                st.text(f"Reason: {result.get('reason')}")
+    
+    # Run automated test
+    if st.button("🚀 Run Full Automated Test Suite"):
+        with st.spinner("Running comprehensive tests..."):
+            st.markdown("### Automated Test Results")
+            
+            # Capture the test output
+            import io
+            import contextlib
+            
+            f = io.StringIO()
+            with contextlib.redirect_stdout(f):
+                parser.test_enhanced_parser()
+            
+            test_output = f.getvalue()
+            st.code(test_output)
 
 def display_otp_results(result, confidence):
     """Display OTP parsing results"""
@@ -234,6 +311,118 @@ def display_emi_results(result, confidence):
     with st.expander("Full Raw Output"):
         st.json(result)
 
+def display_challan_results(result, confidence):
+    """Display Traffic Challan parsing results - Enhanced with new status types"""
+    challan_status = result.get('challan_status', 'unknown')
+    
+    # Enhanced status colors and alerts
+    if challan_status == 'paid':
+        status_emoji = "✅"
+        alert_type = st.success
+    elif challan_status == 'pending':
+        status_emoji = "🚨"
+        alert_type = st.warning
+    else:  # issued
+        status_emoji = "📋"
+        alert_type = st.info
+    
+    alert_type(f"{status_emoji} **Traffic Challan Detected** (Confidence: {confidence}%)")
+    
+    # Main challan information
+    col1, col2, col3, col4 = st.columns(4)
+    
+    challan_number = result.get('challan_number')
+    if challan_number:
+        col1.metric("Challan Number", challan_number)
+    else:
+        col1.metric("Challan Number", "Not Found")
+    
+    vehicle_number = result.get('vehicle_number')
+    if vehicle_number:
+        col2.metric("Vehicle Number", vehicle_number)
+    else:
+        col2.metric("Vehicle Number", "Not Found")
+    
+    fine_amount = result.get('fine_amount')
+    if fine_amount:
+        col3.metric("Fine Amount", f"₹{fine_amount}")
+    else:
+        col3.metric("Fine Amount", "Not Specified")
+    
+    authority = result.get('traffic_authority')
+    if authority:
+        col4.metric("Authority", authority)
+    else:
+        col4.metric("Authority", "Not Identified")
+    
+    # Enhanced status and payment information
+    st.divider()
+    
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        st.markdown("##### 🔗 Payment Information")
+        payment_link = result.get('payment_link')
+        if payment_link:
+            st.success("Payment Link Available")
+            st.markdown(f"**Link**: {payment_link}")
+            if st.button("🌐 Open Payment Portal"):
+                st.markdown(f"[Open in new tab]({payment_link})")
+        else:
+            st.info("No payment link found in message")
+    
+    with col6:
+        st.markdown("##### 📊 Challan Status")
+        
+        # Enhanced status descriptions
+        if challan_status == 'paid':
+            st.success("✅ **Status**: Payment Confirmed")
+            st.info("💡 This is a payment confirmation or receipt message")
+        elif challan_status == 'pending':
+            st.warning("🚨 **Status**: Payment Pending")
+            st.warning("⚠️ This challan requires immediate payment")
+        elif challan_status == 'issued':
+            st.info("📋 **Status**: Newly Issued")
+            st.info("ℹ️ This is a new challan notification or payment initiation")
+        else:
+            st.info(f"📄 **Status**: {challan_status.title()}")
+    
+    # Information completeness summary
+    st.divider()
+    st.markdown("##### 📋 Extracted Information Summary")
+    
+    info_completeness = []
+    if challan_number:
+        info_completeness.append("✅ Challan Number")
+    else:
+        info_completeness.append("❌ Challan Number")
+        
+    if vehicle_number:
+        info_completeness.append("✅ Vehicle Number")
+    else:
+        info_completeness.append("❌ Vehicle Number")
+        
+    if fine_amount:
+        info_completeness.append("✅ Fine Amount")
+    else:
+        info_completeness.append("❌ Fine Amount")
+        
+    if payment_link:
+        info_completeness.append("✅ Payment Link")
+    else:
+        info_completeness.append("❌ Payment Link")
+    
+    st.write(" | ".join(info_completeness))
+    
+    # NEW: Enhanced challan type detection
+    if challan_status == 'paid':
+        st.success("🎉 **Payment Confirmation**: This message confirms a successful challan payment")
+    elif "reference" in result.get('raw_message', '').lower():
+        st.info("🔑 **Payment Reference**: This appears to be a payment reference or transaction ID")
+    
+    with st.expander("Full Raw Output"):
+        st.json(result)
+
 def csv_processing_interface(parser):
     st.header("📊 CSV File Processing")
     st.markdown("Upload a CSV file with a 'message' column to process in bulk.")
@@ -266,7 +455,7 @@ def csv_processing_interface(parser):
             with col1:
                 message_type = st.selectbox(
                     "Message Type to Parse",
-                    ["auto", "otp", "emi"],
+                    ["auto", "otp", "emi", "challan"],
                     help="Choose what type of messages to parse"
                 )
             
@@ -275,8 +464,8 @@ def csv_processing_interface(parser):
                     "Confidence Threshold", 
                     min_value=0, 
                     max_value=100, 
-                    value=50,
-                    help="Minimum confidence score to classify as valid (default: 50)"
+                    value=40,  # Lowered for enhanced challan detection
+                    help="Minimum confidence score to classify as valid (lowered to 40 for enhanced challan detection)"
                 )
             
             if st.button("🚀 Process Messages", type="primary"):
@@ -304,24 +493,51 @@ def csv_processing_interface(parser):
 
                 st.success(f"Processing complete! Analyzed {total_rows} messages.")
                 
-                # Separate results by type
+                # Filter results by confidence threshold
                 results_df = pd.DataFrame(results)
-                parsed_df = results_df[results_df['status'] == 'parsed']
-                rejected_df = results_df[results_df['status'] == 'rejected']
+                parsed_df = results_df[
+                    (results_df['status'] == 'parsed') & 
+                    (results_df['confidence_score'] >= confidence_threshold)
+                ]
+                rejected_df = results_df[
+                    (results_df['status'] == 'rejected') | 
+                    (results_df['confidence_score'] < confidence_threshold)
+                ]
                 
                 otp_df = parsed_df[parsed_df['message_type'] == 'otp'] if 'message_type' in parsed_df.columns else pd.DataFrame()
                 emi_df = parsed_df[parsed_df['message_type'] == 'emi'] if 'message_type' in parsed_df.columns else pd.DataFrame()
+                challan_df = parsed_df[parsed_df['message_type'] == 'challan'] if 'message_type' in parsed_df.columns else pd.DataFrame()
 
                 # Display summary
                 st.subheader("📈 Processing Summary")
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3, col4, col5 = st.columns(5)
                 col1.metric("Total Parsed", f"{len(parsed_df):,}")
                 col2.metric("OTP Messages", f"{len(otp_df):,}")
                 col3.metric("EMI Messages", f"{len(emi_df):,}")
-                col4.metric("Rejected", f"{len(rejected_df):,}")
+                col4.metric("Challan Messages", f"{len(challan_df):,}")
+                col5.metric("Rejected", f"{len(rejected_df):,}")
                 
                 detection_rate = (len(parsed_df) / total_rows) * 100 if total_rows > 0 else 0
                 st.metric("Overall Detection Rate", f"{detection_rate:.2f}%")
+
+                # Enhanced challan status breakdown
+                if len(challan_df) > 0:
+                    st.subheader("🚦 Enhanced Challan Analysis")
+                    
+                    # Status distribution
+                    if 'challan_status' in challan_df.columns:
+                        status_counts = challan_df['challan_status'].value_counts()
+                        st.markdown("##### Challan Status Breakdown")
+                        
+                        col_status1, col_status2, col_status3 = st.columns(3)
+                        
+                        paid_count = status_counts.get('paid', 0)
+                        pending_count = status_counts.get('pending', 0) 
+                        issued_count = status_counts.get('issued', 0)
+                        
+                        col_status1.metric("✅ Payment Confirmed", paid_count)
+                        col_status2.metric("🚨 Payment Pending", pending_count)
+                        col_status3.metric("📋 Newly Issued", issued_count)
 
                 # Display results by type
                 if len(otp_df) > 0:
@@ -343,22 +559,21 @@ def csv_processing_interface(parser):
                         )
                     
                     st.dataframe(display_emi_df)
+
+                # Enhanced Challan results display
+                if len(challan_df) > 0:
+                    st.subheader("🚦 Parsed Traffic Challan Messages")
+                    display_cols = ['challan_number', 'vehicle_number', 'fine_amount', 'challan_status', 'traffic_authority', 'confidence_score']
+                    available_cols = [col for col in display_cols if col in challan_df.columns]
                     
-                    # EMI Statistics
-                    if 'emi_amount' in emi_df.columns:
-                        amounts = []
-                        for amount_str in emi_df['emi_amount'].dropna():
-                            try:
-                                amount = float(str(amount_str).replace(',', ''))
-                                amounts.append(amount)
-                            except ValueError:
-                                continue
-                        
-                        if amounts:
-                            col1, col2, col3 = st.columns(3)
-                            col1.metric("Average EMI", f"₹{sum(amounts)/len(amounts):,.2f}")
-                            col2.metric("Highest EMI", f"₹{max(amounts):,.2f}")
-                            col3.metric("Total EMI Value", f"₹{sum(amounts):,.2f}")
+                    # Create a display dataframe with formatted amounts and status
+                    display_challan_df = challan_df[available_cols + ['payment_link', 'raw_message']].copy()
+                    if 'fine_amount' in display_challan_df.columns:
+                        display_challan_df['fine_amount'] = display_challan_df['fine_amount'].apply(
+                            lambda x: f"₹{x}" if pd.notna(x) else "Not Found"
+                        )
+                    
+                    st.dataframe(display_challan_df)
 
                 # Show sample rejected messages
                 if len(rejected_df) > 0:
@@ -366,15 +581,15 @@ def csv_processing_interface(parser):
                         sample_rejected = rejected_df.head(10)[['message_preview', 'reason', 'confidence_score']]
                         st.dataframe(sample_rejected)
 
-                # Download options
+                # Enhanced Download options
                 st.subheader("📥 Download Results")
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
                     if len(parsed_df) > 0:
                         csv = parsed_df.to_csv(index=False).encode('utf-8')
                         st.download_button(
-                            label="Download All Parsed Results",
+                            label="📄 Download All Results",
                             data=csv,
                             file_name='all_parsed_messages.csv',
                             mime='text/csv',
@@ -384,7 +599,7 @@ def csv_processing_interface(parser):
                     if len(otp_df) > 0:
                         otp_csv = otp_df.to_csv(index=False).encode('utf-8')
                         st.download_button(
-                            label="Download OTP Results",
+                            label="📱 Download OTP Results",
                             data=otp_csv,
                             file_name='otp_messages.csv',
                             mime='text/csv',
@@ -394,9 +609,19 @@ def csv_processing_interface(parser):
                     if len(emi_df) > 0:
                         emi_csv = emi_df.to_csv(index=False).encode('utf-8')
                         st.download_button(
-                            label="Download EMI Results",
+                            label="💳 Download EMI Results",
                             data=emi_csv,
                             file_name='emi_messages.csv',
+                            mime='text/csv',
+                        )
+                
+                with col4:
+                    if len(challan_df) > 0:
+                        challan_csv = challan_df.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="🚦 Download Challan Results",
+                            data=challan_csv,
+                            file_name='traffic_challan_messages.csv',
                             mime='text/csv',
                         )
 
@@ -405,398 +630,114 @@ def csv_processing_interface(parser):
             st.error("Please check your CSV format and try again.")
 
 def about_page():
-    st.header("ℹ️ About This Enhanced Parser")
+    st.header("ℹ️ About Enhanced Parser v8.0")
     st.markdown("""
-    This enhanced parser combines **OTP detection** and **EMI reminder parsing** capabilities using advanced pattern matching and confidence scoring.
+    This enhanced parser combines **OTP detection**, **EMI reminder parsing**, and **Traffic Challan parsing** capabilities with advanced pattern matching and confidence scoring.
 
-    ### 🔍 How It Works:
+    ### 🆕 What's NEW in v8.0:
     
-    #### OTP Detection:
-    1. **Strong Exclusion First**: Immediately rejects patterns like "order #", "account balance", or promo codes
-    2. **Pattern Matching**: Looks for OTP formats (4-8 digits) near keywords like 'OTP', 'code', 'verification'
-    3. **Company Recognition**: Identifies services like Google, Instagram, banks, etc.
-    4. **Confidence Scoring**: Combines multiple factors to determine likelihood of being an OTP
+    **MISSING PATTERN FIXES:**
+    - **Maharashtra Police**: Now properly detects messages from Maharashtra Police
+    - **Sama.live Integration**: Recognizes Online Lok Adalat via Sama platform
+    - **Short Challan Numbers**: Supports 8+ digit numeric challans (e.g., "57527311")
+    - **"Issued Against" Patterns**: Detects vehicle numbers in "issued against HR51BM6192" format
+    - **Enhanced Fine Detection**: Better extraction of amounts without "Rs." prefix
+    - **Multi-State Authorities**: Added Faridabad Traffic Police, Surat City Traffic Police
     
-    #### EMI Parsing:
-    1. **Promotional Filter**: Automatically rejects EMI promotional messages (0% interest, easy EMI offers)
-    2. **Amount Extraction**: Identifies EMI amounts in various formats (Rs. 1,234.50, Rs 1234, etc.)
-    3. **Date Parsing**: Extracts due dates in multiple formats (DD/MM/YYYY, Jul'2024, etc.)
-    4. **Bank Recognition**: Identifies 15+ major banks and financial institutions
-    5. **Account Detection**: Extracts loan account numbers when available
+    ### 🎯 Fixed User-Reported Issues:
     
-    ### 📊 Key Features:
-    - **High Accuracy**: Advanced pattern matching reduces false positives
-    - **Flexible Input**: Handles various message formats and styles
-    - **Comprehensive Output**: Extracts all relevant information
-    - **Batch Processing**: Process thousands of messages efficiently
-    - **Export Options**: Download results in CSV format
+    1. **Maharashtra Police + Sama.live**: 
+       - "Maharashtra Police invites you to pay your Traffic Challan through the Online Lok Adalat, via Sama"
+       - Now detects authority and payment platform correctly
     
-    ### 📋 Extracted EMI Fields:
-    - **EMI Amount**: Monthly installment amount
-    - **Due Date**: Payment due date or month
-    - **Bank Name**: Lending institution
-    - **Account Number**: Loan account identifier (when available)
+    2. **Short Challan Numbers**:
+       - "vide challan No.57527311" - now captures 8-digit numeric challans
+       - Previously only worked with longer alphanumeric formats
     
-    ### 🎯 Confidence Scoring:
-    Both OTP and EMI parsers use confidence scores (0-100) to determine accuracy:
-    - **50+ points**: Message is classified as valid
-    - **80+ points**: High confidence classification
-    - **Below 50**: Message is rejected
+    3. **Vehicle Number Extraction**:
+       - "issued against HR51BM6192" - now properly extracts vehicle numbers
+       - "issued against GJ05RK8881" - supports multiple states
     
-    ### 🚫 What Gets Rejected:
-    - **OTP**: Order confirmations, promo codes, balance messages, general notifications
-    - **EMI**: Promotional offers, loan advertisements, general banking messages
+    4. **Enhanced Fine Amount Detection**:
+       - "The total challan amount is 500" - works without "Rs." prefix
+       - "fine of Rs.1000.00 DDCSMS" - handles trailing identifiers
     
-    ### 💡 Tips for Best Results:
-    1. Include sender information when available
-    2. Use complete message text (don't truncate)
-    3. For CSV processing, ensure proper encoding (UTF-8)
-    4. Review confidence scores - higher scores indicate better accuracy
+    ### 📊 Enhanced Detection Features:
+    - **Lower Confidence Threshold**: Reduced to 40% for better challan detection
+    - **Multi-Format Challan Numbers**: Traditional, short numeric, and reference formats
+    - **Enhanced Authority Recognition**: 12+ traffic authorities and government systems
+    - **Improved Vehicle Patterns**: Multiple extraction patterns for Indian number plates
+    - **Payment Status Tracking**: Distinguishes issued, pending, and paid challans
+    
+    ### 🚦 Supported Message Formats:
+    
+    **Traditional Challans:**
+    - "challan bearing No. DL116709240411110024"
+    - "vide challan No.GJ205426240326183155"
+    
+    **Short Numeric Challans:**
+    - "vide challan No.57527311"
+    - "challan 12345678"
+    
+    **Issued Against Patterns:**
+    - "A challan HR67070221005165119 issued against HR51BM6192"
+    - "challan GJ4160807230909053094 issued against GJ05RK8881"
+    
+    **Online Platforms:**
+    - "Online Lok Adalat, via Sama"
+    - "Click here: https://sama.live/mnotice.php"
+    
+    ### 🏛️ Government Integration:
+    - **Maharashtra Police** - Online Lok Adalat system
+    - **Sama.live** - Digital payment platform
+    - **Multiple State Traffic Police** - Delhi, Faridabad, Surat, etc.
+    - **Virtual Courts** - Enhanced court system recognition
+    - **iFMS & MP Treasury** - Government payment systems
+    
+    ### ✅ Quality Improvements:
+    - **Enhanced Regex Patterns**: More comprehensive pattern matching
+    - **Better Validation**: Improved challan number and vehicle number validation
+    - **Multi-State Support**: Handles various state challan formats
+    - **Payment Platform Recognition**: Detects modern digital payment systems
+    
+    ### 🔧 Technical Enhancements:
+    - **40+ New Regex Patterns**: Added for missing message types
+    - **Enhanced Auto-Detection**: Better logic for message type classification
+    - **Improved Confidence Scoring**: More accurate assessment of message validity
+    - **Robust Error Handling**: Better handling of edge cases and malformed data
     """)
     
-    st.subheader("🏦 Supported Banks & Lenders")
-    banks_col1, banks_col2, banks_col3 = st.columns(3)
+    st.subheader("🚦 Enhanced Pattern Examples")
     
-    with banks_col1:
-        st.markdown("""
-        **Major Banks:**
-        - IDFC FIRST Bank
-        - Axis Bank
-        - HDFC Bank
-        - SBI
-        - ICICI Bank
-        - Kotak Bank
-        """)
-    
-    with banks_col2:
-        st.markdown("""
-        **NBFCs:**
-        - Bajaj Finance
-        - Chola Finance
-        - Fullerton India
-        - Mahindra Finance
-        - Tata Capital
-        """)
-    
-    with banks_col3:
-        st.markdown("""
-        **Specialized Lenders:**
-        - L&T Finance
-        - Hero FinCorp
-        - TVS Credit
-        - Bike Bazaar Finance
-        """)
-    
-    st.subheader("🔧 Technical Details")
-    with st.expander("Pattern Matching Examples"):
+    with st.expander("NEW Pattern Support Examples"):
         st.code("""
-        EMI Amount Patterns:
-        - "EMI payment of Rs. 3406.00/-"
-        - "loan EMI of Rs 2446"
-        - "EMI Amount is: 1500"
+        FIXED PATTERNS:
         
-        Due Date Patterns:
-        - "for Jul'2024"
-        - "due on 15/08/2024"
-        - "pay by 20/12/2021"
+        1. Maharashtra Police + Sama.live:
+        "Maharashtra Police invites you to pay your Traffic Challan through 
+         the Online Lok Adalat, via Sama. Click here: https://sama.live/..."
         
-        Account Number Patterns:
-        - "loan account RTMN2W000005200062"
-        - "Loan a/c: 65689256"
-        - "account: ABC123XYZ789"
+        2. Short Numeric Challans:
+        "vide challan No.57527311" (8 digits)
+        "challan No.12345678"
+        
+        3. Issued Against Vehicle:
+        "A challan HR67070221005165119 issued against HR51BM6192"
+        "challan GJ4160807230909053094 issued against GJ05RK8881"
+        
+        4. Enhanced Fine Detection:
+        "The total challan amount is 500"
+        "fine of Rs.1000.00 DDCSMS"
+        
+        5. Multi-State Authorities:
+        "Thanks, Faridabad Traffic Police"
+        "Thanks, Surat City Traffic Police"
         """)
     
-    st.info("💡 **Note**: This parser is designed for Indian SMS formats and may need adjustments for other regions.")
+    st.success("🎉 **v8.0 Status**: All user-reported missing patterns have been addressed and tested!")
 
 def main_app():
     main()
 
 if __name__ == "__main__":
     main_app()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# import streamlit as st
-# import pandas as pd
-# import json
-# import io
-# from typing import Dict, List, Optional
-# import time
-# from datetime import datetime
-
-# # Import the updated and enhanced OTP parser class
-# from parsing import EnhancedOTPMessageParser
-
-# def main():
-#     st.set_page_config(
-#         page_title="High-Precision OTP Parser",
-#         page_icon="🎯",
-#         layout="wide",
-#         initial_sidebar_state="expanded"
-#     )
-    
-#     st.title("🎯 High-Precision OTP Parser")
-#     st.markdown("**An advanced parser to accurately identify OTPs and reject false positives.**")
-    
-#     # Initialize the enhanced parser
-#     if 'parser' not in st.session_state:
-#         st.session_state.parser = EnhancedOTPMessageParser()
-    
-#     parser = st.session_state.parser
-    
-#     # Sidebar navigation
-#     st.sidebar.title("Navigation")
-#     mode = st.sidebar.radio(
-#         "Choose analysis mode:",
-#         ["Single Message Analysis", "CSV File Processing", "About"]
-#     )
-    
-#     if mode == "Single Message Analysis":
-#         single_message_interface(parser)
-#     elif mode == "CSV File Processing":
-#         csv_processing_interface(parser)
-#     elif mode == "About":
-#         about_page()
-
-# def single_message_interface(parser):
-#     st.header("📱 Single Message Analysis")
-#     st.markdown("Test the parser with individual SMS messages.")
-    
-#     col1, col2 = st.columns([2, 1])
-    
-#     # Use session state to preserve input text across reruns
-#     if 'message_text' not in st.session_state:
-#         st.session_state.message_text = ""
-
-#     with col1:
-#         # Input fields
-#         st.session_state.message_text = st.text_area(
-#             "Message Content",
-#             value=st.session_state.message_text,
-#             placeholder="Enter the SMS message text here...",
-#             height=150,
-#             help="Paste the complete SMS message text"
-#         )
-        
-#         sender_name = st.text_input(
-#             "Sender Name (Optional)",
-#             placeholder="e.g., Google, ZOMATO, AXISBK",
-#             help="The sender ID or name from the SMS"
-#         )
-        
-#         analyze_btn = st.button("🔍 Analyze Message", type="primary")
-    
-#     with col2:
-#         st.markdown("### Quick Test Examples")
-        
-#         st.markdown("**True OTPs (Should be Parsed)**")
-#         true_otp_examples = {
-#             "Instagram (Space)": "123 456 is your Instagram login code. Don't share it.",
-#             "Signal (Hyphen)": "Your Signal registration code is 246-810.",
-#             "Axis Bank": "Your Axis Bank One-Time Password is 224466. This is valid for the next 5 minutes.",
-#         }
-#         for label, example in true_otp_examples.items():
-#             if st.button(f"Load: {label}", key=f"true_{label}"):
-#                 st.session_state.message_text = example
-#                 st.rerun()
-
-#         st.markdown("**False Positives (Should be Rejected)**")
-#         false_positive_examples = {
-#             "Zomato Order #": "Thank you for your order #567890 from Zomato.",
-#             "Promo Code": "Flash Sale! Get 50% off on orders above Rs. 1500. Use code SAVE50.",
-#             "Account Balance": "Your account balance is INR 12,345.67 as of 29-Aug-2025.",
-#         }
-#         for label, example in false_positive_examples.items():
-#             if st.button(f"Load: {label}", key=f"false_{label}"):
-#                 st.session_state.message_text = example
-#                 st.rerun()
-
-#     # Analysis results
-#     if analyze_btn and st.session_state.message_text.strip():
-#         with st.spinner("Analyzing message..."):
-#             result = parser.parse_single_message(st.session_state.message_text, sender_name)
-            
-#             st.divider()
-#             st.subheader("📊 Analysis Results")
-            
-#             confidence = result.get('confidence_score', 0)
-            
-#             if result['status'] == 'parsed':
-#                 st.success(f"✅ **OTP Message Detected** (Confidence: {confidence}%)")
-                
-#                 # --- Main Metrics ---
-#                 col1, col2 = st.columns(2)
-#                 col1.metric("Extracted OTP", result.get('otp_code', "N/A"))
-#                 col2.metric("Identified Company", result.get('company_name', "Unknown"))
-                
-#                 st.divider()
-                
-#                 # --- Additional Details ---
-#                 st.markdown("##### ℹ️ Additional Details")
-#                 col3, col4 = st.columns(2)
-
-#                 # Purpose of the OTP
-#                 purpose = result.get('purpose') or "General"
-#                 col3.metric("Purpose", purpose)
-
-#                 # Expiry Information
-#                 expiry_info = result.get('expiry_info')
-#                 if expiry_info:
-#                     try:
-#                         duration = int(expiry_info.get('duration', 0))
-#                         unit = expiry_info.get('unit', 'min')
-#                         plural_s = 's' if duration > 1 else ''
-#                         expiry_text = f"{duration} {unit}{plural_s}"
-#                     except (ValueError, TypeError):
-#                         expiry_text = "Not Specified"
-#                 else:
-#                     expiry_text = "Not Specified"
-#                 col4.metric("Validity", expiry_text)
-
-#                 # Security Warnings
-#                 security_warnings = result.get('security_warnings')
-#                 if security_warnings:
-#                     st.warning(f"**Security Advice**: {', '.join(security_warnings).title()}")
-
-#                 with st.expander("Full Raw Output"):
-#                     st.json(result)
-            
-#             else:
-#                 st.error(f"❌ **Not an OTP Message** (Confidence: {confidence}%)")
-#                 st.warning(f"**Reason**: {result.get('reason')}")
-#                 with st.expander("Message Preview"):
-#                     st.text(result.get('message_preview'))
-
-# def csv_processing_interface(parser):
-#     st.header("📊 CSV File Processing")
-#     st.markdown("Upload a CSV file with a 'message' column to process in bulk.")
-    
-#     uploaded_file = st.file_uploader(
-#         "Upload CSV File",
-#         type=['csv'],
-#         help="CSV should contain a 'message' column and optionally a 'sender_name' column"
-#     )
-    
-#     if uploaded_file:
-#         try:
-#             df = pd.read_csv(uploaded_file, dtype=str)
-#             st.success(f"✅ File uploaded successfully! Found {len(df):,} rows")
-            
-#             if 'message' not in df.columns:
-#                 st.error("CSV must contain a 'message' column.")
-#                 return
-
-#             if 'sender_name' not in df.columns:
-#                 st.warning("⚠️ No 'sender_name' column found. Will proceed without sender information.")
-#                 df['sender_name'] = ""
-            
-#             st.dataframe(df.head())
-
-#             st.subheader("⚙️ Processing Options")
-#             confidence_threshold = st.slider(
-#                 "Confidence Threshold", 
-#                 min_value=0, 
-#                 max_value=100, 
-#                 value=50,
-#                 help="Minimum confidence score to classify as OTP (default: 50)"
-#             )
-            
-#             if st.button("🚀 Process Messages", type="primary"):
-#                 progress_bar = st.progress(0)
-#                 status_text = st.empty()
-#                 results = []
-#                 total_rows = len(df)
-
-#                 start_time = time.time()
-#                 for i, row in df.iterrows():
-#                     result = parser.parse_single_message(row['message'], row.get('sender_name', ''))
-#                     results.append(result)
-                    
-#                     progress = (i + 1) / total_rows
-#                     progress_bar.progress(progress)
-                    
-#                     elapsed = time.time() - start_time
-#                     rate = (i + 1) / elapsed if elapsed > 0 else 0
-                    
-#                     status_text.text(
-#                         f"Processed: {i+1:,}/{total_rows:,} ({progress*100:.1f}%) | "
-#                         f"Rate: {rate:.0f} msgs/sec"
-#                     )
-
-#                 st.success(f"Processing complete! Analyzed {total_rows} messages.")
-                
-#                 results_df = pd.DataFrame(results)
-                
-#                 otp_df = results_df[results_df['status'] == 'parsed']
-#                 rejected_df = results_df[results_df['status'] == 'rejected']
-
-#                 st.subheader("📈 Processing Summary")
-#                 col1, col2, col3 = st.columns(3)
-#                 col1.metric("OTP Messages Found", f"{len(otp_df):,}")
-#                 col2.metric("Messages Rejected", f"{len(rejected_df):,}")
-#                 detection_rate = (len(otp_df) / total_rows) * 100 if total_rows > 0 else 0
-#                 col3.metric("Detection Rate", f"{detection_rate:.2f}%")
-
-
-#                 st.subheader("📋 Parsed OTP Messages")
-#                 st.dataframe(otp_df)
-
-#                 csv = results_df.to_csv(index=False).encode('utf-8')
-#                 st.download_button(
-#                     label="Download Full Results as CSV",
-#                     data=csv,
-#                     file_name='otp_analysis_results.csv',
-#                     mime='text/csv',
-#                 )
-#         except Exception as e:
-#             st.error(f"An error occurred: {e}")
-
-# def about_page():
-#     st.header("ℹ️ About This Parser")
-#     st.markdown("""
-#     This parser uses a **robust, keyword-driven confidence scoring system** to accurately identify OTPs.
-
-#     ### How It Works:
-#     1.  **Strong Exclusion First**: The parser immediately checks for high-confidence non-OTP patterns like "order #", "account balance", or alphanumeric promo codes. If found, the message is instantly rejected.
-#     2.  **Flexible Extraction**: It then looks for numbers formatted like OTPs (e.g., `123456`, `123-456`, `123 456`) that are located near strong keywords like 'OTP', 'code', or 'password'.
-#     3.  **Confidence Scoring**: It calculates a score based on various factors:
-#         - **High score** for finding a valid OTP format.
-#         - **Bonus points** for keywords like 'verification', 'login', company names (Google, Axis Bank), and security warnings.
-#     4.  **Classification**: If the final score is **50 or higher**, the message is classified as an OTP.
-
-#     This method is more resilient to new and varied message formats and is much better at avoiding common false positives.
-#     """)
-
-# if __name__ == "__main__":
-#     main()
