@@ -11,15 +11,15 @@ from enhanced_parsing import EnhancedMessageParser
 
 def main():
     st.set_page_config(
-        page_title="Enhanced Message Parser v9.2 - OTP, EMI, Challan & Transportation",
-        page_icon="🚦",
+        page_title="Enhanced Message Parser v10.0 - OTP, EMI, Challan & Transportation",
+        page_icon="⚖️",
         layout="wide",
         initial_sidebar_state="expanded"
     )
     
-    st.title("🚦 Enhanced Message Parser v9.2")
+    st.title("⚖️ Enhanced Message Parser v10.0")
     st.markdown("**Advanced parser for OTPs, EMI reminders, Traffic Challans, and Transportation messages**")
-    st.success("✨ **NEW v9.2**: Hotfix for transportation parsing (Locations & Seat/Coach). Improved accuracy for train messages! 🚂✈️🚌")
+    st.success("✨ **NEW v10.0**: Added parsing for Platform/Gate, Flight/Bus numbers & Departure Times. Added 'Court Disposal' status for Challans! 🚂✈️🚌")
     
     # Initialize the enhanced parser
     if 'parser' not in st.session_state:
@@ -212,6 +212,9 @@ def display_challan_results(result, confidence):
     elif challan_status == 'pending':
         status_emoji = "🚨"
         alert_type = st.warning
+    elif challan_status == 'court_disposal': # NEW: Handle court disposal status
+        status_emoji = "⚖️"
+        alert_type = st.error
     else:  # issued
         status_emoji = "📋"
         alert_type = st.info
@@ -274,6 +277,9 @@ def display_challan_results(result, confidence):
         elif challan_status == 'issued':
             st.info("📋 **Status**: Newly Issued")
             st.info("ℹ️ This is a new challan notification or payment initiation")
+        elif challan_status == 'court_disposal': # NEW: Status description for court disposal
+            st.error("⚖️ **Status**: Sent to Court")
+            st.error("❗ This challan must be handled through court proceedings.")
         else:
             st.info(f"📄 **Status**: {challan_status.title()}")
     
@@ -314,7 +320,7 @@ def display_challan_results(result, confidence):
         st.json(result)
 
 def display_transportation_results(result, confidence):
-    """Display Transportation parsing results - OPTIMIZED + NEW seat/class info"""
+    """Display Transportation parsing results - UPDATED with new travel details"""
     transport_type = result.get('transport_type', 'unknown')
     
     # Transport type colors and alerts
@@ -334,60 +340,68 @@ def display_transportation_results(result, confidence):
     alert_type(f"{transport_emoji} **Transportation Message Detected** (Confidence: {confidence}%)")
     
     # Main transportation information
+    st.markdown("##### 🗺️ Route Information")
     col1, col2, col3, col4 = st.columns(4)
     
-    col1.metric("PNR Number", result.get('pnr_number', "Not Found"))
-    col2.metric("Date of Journey", result.get('date_of_journey', "Not Found"))
-    col3.metric("Boarding Place", result.get('boarding_place', "Not Found"))
-    col4.metric("Drop Place", result.get('drop_place', "Not Found"))
+    col1.metric("PNR Number", result.get('pnr_number') or "Not Found")
+    col2.metric("Date of Journey", result.get('date_of_journey') or "Not Found")
+    col3.metric("Boarding Place", result.get('boarding_place') or "Not Found")
+    col4.metric("Drop Place", result.get('drop_place') or "Not Found")
 
-    # **NEW**: Seat and Class information
+    # Seat and Class information
     st.divider()
+    st.markdown("##### 💺 Seat & Class Information")
     col5, col6 = st.columns(2)
-    col5.metric("Seat Number / Coach", result.get('seat_number', "Not Found"))
-    col6.metric("Class", result.get('class', "Not Found"))
-
-    # Additional transportation information
+    col5.metric("Seat / Coach", result.get('seat_number') or "Not Found")
+    col6.metric("Class", result.get('class') or "Not Found")
+    
+    # NEW: Display specific travel details based on transport type
     st.divider()
+    st.markdown("##### ℹ️ Travel Details")
     
-    col7, col8 = st.columns(2)
+    details_cols = st.columns(4)
     
-    with col7:
-        st.markdown("##### 🏢 Service Provider")
-        transport_provider = result.get('transport_provider')
-        if transport_provider:
-            st.success(f"**Provider**: {transport_provider}")
-        else:
-            st.info("Provider not identified")
+    # Flight Number
+    if result.get('flight_number'):
+        details_cols[0].metric("Flight Number", result.get('flight_number'))
     
-    with col8:
-        st.markdown("##### 🚀 Transport Type")
-        if transport_type != 'unknown':
-            st.success(f"**Type**: {transport_type.title()}")
-            
-            # Type-specific information
-            if transport_type == 'train':
-                st.info("🚂 Railway booking confirmation")
-            elif transport_type == 'flight':
-                st.info("✈️ Flight booking confirmation")
-            elif transport_type == 'bus':
-                st.info("🚌 Bus booking confirmation")
-        else:
-            st.warning("Transport type could not be determined")
+    # Bus Number
+    if result.get('bus_number'):
+        details_cols[0].metric("Bus Number", result.get('bus_number'))
     
+    # Departure Time
+    if result.get('departure_time'):
+        details_cols[1].metric("Departure Time", result.get('departure_time'))
+
+    # Gate Number (for flights)
+    if result.get('gate_number'):
+        details_cols[2].metric("Boarding Gate", result.get('gate_number'))
+    
+    # Platform Number (for trains)
+    if result.get('platform_number'):
+        details_cols[2].metric("Platform No.", result.get('platform_number'))
+
+    # Service Provider
+    if result.get('transport_provider'):
+        details_cols[3].metric("Provider", result.get('transport_provider'))
+
     # Information completeness summary
     st.divider()
     st.markdown("##### 📋 Extracted Information Summary")
     
     info_completeness = []
-    info_completeness.append("✅ PNR Number" if result.get('pnr_number') else "❌ PNR Number")
-    info_completeness.append("✅ Date of Journey" if result.get('date_of_journey') else "❌ Date of Journey")
-    info_completeness.append("✅ Boarding Place" if result.get('boarding_place') else "❌ Boarding Place")
-    info_completeness.append("✅ Drop Place" if result.get('drop_place') else "❌ Drop Place")
-    info_completeness.append("✅ Seat Number" if result.get('seat_number') else "❌ Seat Number")
+    info_completeness.append("✅ PNR" if result.get('pnr_number') else "❌ PNR")
+    info_completeness.append("✅ Journey Date" if result.get('date_of_journey') else "❌ Journey Date")
+    info_completeness.append("✅ Boarding" if result.get('boarding_place') else "❌ Boarding")
+    info_completeness.append("✅ Drop" if result.get('drop_place') else "❌ Drop")
+    info_completeness.append("✅ Seat/Coach" if result.get('seat_number') else "❌ Seat/Coach")
     info_completeness.append("✅ Class" if result.get('class') else "❌ Class")
-    info_completeness.append("✅ Service Provider" if result.get('transport_provider') else "❌ Service Provider")
-    
+    info_completeness.append("✅ Provider" if result.get('transport_provider') else "❌ Provider")
+    # NEW: Add new fields to completeness check
+    info_completeness.append("✅ Departure Time" if result.get('departure_time') else "❌ Departure Time")
+    info_completeness.append("✅ Travel No." if result.get('flight_number') or result.get('bus_number') else "❌ Travel No.")
+    info_completeness.append("✅ Gate/Platform" if result.get('gate_number') or result.get('platform_number') else "❌ Gate/Platform")
+
     st.write(" | ".join(info_completeness))
     
     with st.expander("Full Raw Output"):
@@ -520,15 +534,17 @@ def csv_processing_interface(parser):
                         status_counts = challan_df['challan_status'].value_counts()
                         st.markdown("##### Challan Status Breakdown")
                         
-                        col_status1, col_status2, col_status3 = st.columns(3)
+                        col_status1, col_status2, col_status3, col_status4 = st.columns(4)
                         
                         paid_count = status_counts.get('paid', 0)
                         pending_count = status_counts.get('pending', 0) 
                         issued_count = status_counts.get('issued', 0)
+                        court_count = status_counts.get('court_disposal', 0) # NEW: Get count for court disposal
                         
                         col_status1.metric("✅ Payment Confirmed", paid_count)
                         col_status2.metric("🚨 Payment Pending", pending_count)
                         col_status3.metric("📋 Newly Issued", issued_count)
+                        col_status4.metric("⚖️ Sent to Court", court_count) # NEW: Display court disposal metric
 
                 # Display results by type
                 if len(otp_df) > 0:
@@ -569,7 +585,13 @@ def csv_processing_interface(parser):
                 # NEW: Transportation results display
                 if len(transportation_df) > 0:
                     st.subheader("🚀 Parsed Transportation Messages")
-                    display_cols = ['pnr_number', 'date_of_journey', 'boarding_place', 'drop_place', 'seat_number', 'class', 'transport_type', 'transport_provider', 'confidence_score']
+                    # NEW: Add all new transportation fields to the display columns
+                    display_cols = [
+                        'pnr_number', 'date_of_journey', 'boarding_place', 'drop_place', 
+                        'seat_number', 'class', 'transport_type', 'transport_provider', 
+                        'departure_time', 'flight_number', 'bus_number', 'gate_number', 'platform_number',
+                        'confidence_score'
+                    ]
                     available_cols = [col for col in display_cols if col in transportation_df.columns]
                     
                     st.dataframe(transportation_df[available_cols + ['raw_message']])
@@ -643,4 +665,4 @@ def main_app():
     main()
 
 if __name__ == "__main__":
-    main_app()
+    main_app()  
