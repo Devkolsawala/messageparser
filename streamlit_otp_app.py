@@ -11,15 +11,15 @@ from enhanced_parsing import EnhancedMessageParser
 
 def main():
     st.set_page_config(
-        page_title="Enhanced Message Parser v10.0 - OTP, EMI, Challan & Transportation",
-        page_icon="⚖️",
+        page_title="Enhanced Message Parser v11.0 - OTP, EMI, Challan, Transport & EPF",
+        page_icon="💸",
         layout="wide",
         initial_sidebar_state="expanded"
     )
     
-    st.title("⚖️ Enhanced Message Parser v10.0")
-    st.markdown("**Advanced parser for OTPs, EMI reminders, Traffic Challans, and Transportation messages**")
-    st.success("✨ **NEW v10.0**: Added parsing for Platform/Gate, Flight/Bus numbers & Departure Times. Added 'Court Disposal' status for Challans! 🚂✈️🚌")
+    st.title("💸 Enhanced Message Parser v11.0")
+    st.markdown("**Advanced parser for OTP, EMI, Challan, Transportation, and EPF messages**")
+    st.success("✨ **NEW v11.0**: Added parsing for **EPF Contributions** and transfer messages! 💰")
     
     # Initialize the enhanced parser
     if 'parser' not in st.session_state:
@@ -42,7 +42,7 @@ def main():
 
 def single_message_interface(parser):
     st.header("📱 Single Message Analysis")
-    st.markdown("Test the parser with individual SMS messages for OTP, EMI, Traffic Challan, or Transportation content.")
+    st.markdown("Test the parser with individual SMS messages for OTP, EMI, Traffic Challan, Transportation, or EPF content.")
     
     col1, col2 = st.columns([2, 1])
     
@@ -62,13 +62,13 @@ def single_message_interface(parser):
         
         sender_name = st.text_input(
             "Sender Name (Optional)",
-            placeholder="e.g., Google, ZOMATO, AXISBK, DL-POLICE, IFMS, IRCTC, IndiGo",
+            placeholder="e.g., Google, AXISBK, DL-POLICE, IRCTC, EPFO",
             help="The sender ID or name from the SMS"
         )
         
         message_type = st.selectbox(
             "Message Type",
-            ["auto", "otp", "emi", "challan", "transportation"],
+            ["auto", "otp", "emi", "challan", "transportation", "epf"],
             help="Choose 'auto' for automatic detection, or specify the type"
         )
         
@@ -94,12 +94,13 @@ def single_message_interface(parser):
                     display_challan_results(result, confidence)
                 elif msg_type == 'transportation':
                     display_transportation_results(result, confidence)
+                elif msg_type == 'epf':
+                    display_epf_results(result, confidence)
             else:
                 st.error(f"❌ **Message Not Classified** (Type: {msg_type}, Confidence: {confidence}%)")
                 st.warning(f"**Reason**: {result.get('reason')}")
                 with st.expander("Message Preview"):
                     st.text(result.get('message_preview'))
-
 
 
 def display_otp_results(result, confidence):
@@ -407,6 +408,43 @@ def display_transportation_results(result, confidence):
     with st.expander("Full Raw Output"):
         st.json(result)
 
+# NEW: Display function for EPF results
+def display_epf_results(result, confidence):
+    """Display EPF parsing results"""
+    st.success(f"💰 **EPF Message Detected** (Confidence: {confidence}%)")
+
+    col1, col2 = st.columns(2)
+    amount_credited = result.get('amount_credited')
+    col1.metric("Amount Credited", f"₹{amount_credited}" if amount_credited else "Not Mentioned")
+    col2.metric("UAN Number", result.get('uan_number') or "Not Found")
+
+    col3, col4 = st.columns(2)
+    available_balance = result.get('available_balance')
+    col3.metric("Available Balance", f"₹{available_balance}" if available_balance else "Not Mentioned")
+
+    account = result.get('account_number')
+    masked_account = f"****{account[-4:]}" if account and len(account) > 4 else account
+    col4.metric("Account Number", masked_account or "Not Found")
+
+    st.divider()
+    st.markdown("##### 📋 Extracted Information Summary")
+    
+    info_completeness = []
+    info_completeness.append("✅ Amount" if result.get('amount_credited') else "❌ Amount")
+    info_completeness.append("✅ UAN" if result.get('uan_number') else "❌ UAN")
+    info_completeness.append("✅ Balance" if result.get('available_balance') else "❌ Balance")
+    info_completeness.append("✅ Account" if result.get('account_number') else "❌ Account")
+    st.write(" | ".join(info_completeness))
+    
+    if "auto claim" in result.get('raw_message', '').lower():
+        st.info("ℹ️ **EPF Transfer Notification**: This message relates to the transfer of EPF accumulations.")
+    elif "contribution" in result.get('raw_message', '').lower():
+        st.success("✅ **EPF Contribution Received**: This message confirms a received contribution.")
+    
+    with st.expander("Full Raw Output"):
+        st.json(result)
+
+
 def csv_processing_interface(parser):
     st.header("📊 CSV File Processing")
     st.markdown("Upload a CSV file with a 'message' column to process in bulk.")
@@ -439,7 +477,7 @@ def csv_processing_interface(parser):
             with col1:
                 message_type = st.selectbox(
                     "Message Type to Parse",
-                    ["auto", "otp", "emi", "challan", "transportation"],
+                    ["auto", "otp", "emi", "challan", "transportation", "epf"],
                     help="Choose what type of messages to parse"
                 )
             
@@ -492,16 +530,18 @@ def csv_processing_interface(parser):
                 emi_df = parsed_df[parsed_df['message_type'] == 'emi'] if 'message_type' in parsed_df.columns else pd.DataFrame()
                 challan_df = parsed_df[parsed_df['message_type'] == 'challan'] if 'message_type' in parsed_df.columns else pd.DataFrame()
                 transportation_df = parsed_df[parsed_df['message_type'] == 'transportation'] if 'message_type' in parsed_df.columns else pd.DataFrame()
+                epf_df = parsed_df[parsed_df['message_type'] == 'epf'] if 'message_type' in parsed_df.columns else pd.DataFrame()
 
                 # Display summary
                 st.subheader("📈 Processing Summary")
-                col1, col2, col3, col4, col5, col6 = st.columns(6)
-                col1.metric("Total Parsed", f"{len(parsed_df):,}")
-                col2.metric("OTP Messages", f"{len(otp_df):,}")
-                col3.metric("EMI Messages", f"{len(emi_df):,}")
-                col4.metric("Challan Messages", f"{len(challan_df):,}")
-                col5.metric("Transport Messages", f"{len(transportation_df):,}")
-                col6.metric("Rejected", f"{len(rejected_df):,}")
+                cols = st.columns(7)
+                cols[0].metric("Total Parsed", f"{len(parsed_df):,}")
+                cols[1].metric("OTP Messages", f"{len(otp_df):,}")
+                cols[2].metric("EMI Messages", f"{len(emi_df):,}")
+                cols[3].metric("Challan Messages", f"{len(challan_df):,}")
+                cols[4].metric("Transport Msgs", f"{len(transportation_df):,}")
+                cols[5].metric("EPF Messages", f"{len(epf_df):,}") # NEW
+                cols[6].metric("Rejected", f"{len(rejected_df):,}")
                 
                 detection_rate = (len(parsed_df) / total_rows) * 100 if total_rows > 0 else 0
                 st.metric("Overall Detection Rate", f"{detection_rate:.2f}%")
@@ -509,18 +549,13 @@ def csv_processing_interface(parser):
                 # Enhanced transportation breakdown
                 if len(transportation_df) > 0:
                     st.subheader("🚀 Transportation Analysis Breakdown")
-                    
-                    # Transport type distribution
                     if 'transport_type' in transportation_df.columns:
                         type_counts = transportation_df['transport_type'].value_counts()
                         st.markdown("##### Transportation Type Distribution")
-                        
                         col_transport1, col_transport2, col_transport3 = st.columns(3)
-                        
                         train_count = type_counts.get('train', 0)
                         flight_count = type_counts.get('flight', 0)
                         bus_count = type_counts.get('bus', 0)
-                        
                         col_transport1.metric("🚂 Train Bookings", train_count)
                         col_transport2.metric("✈️ Flight Bookings", flight_count)
                         col_transport3.metric("🚌 Bus Bookings", bus_count)
@@ -528,23 +563,18 @@ def csv_processing_interface(parser):
                 # Enhanced challan status breakdown
                 if len(challan_df) > 0:
                     st.subheader("🚦 Enhanced Challan Analysis")
-                    
-                    # Status distribution
                     if 'challan_status' in challan_df.columns:
                         status_counts = challan_df['challan_status'].value_counts()
                         st.markdown("##### Challan Status Breakdown")
-                        
                         col_status1, col_status2, col_status3, col_status4 = st.columns(4)
-                        
                         paid_count = status_counts.get('paid', 0)
                         pending_count = status_counts.get('pending', 0) 
                         issued_count = status_counts.get('issued', 0)
-                        court_count = status_counts.get('court_disposal', 0) # NEW: Get count for court disposal
-                        
+                        court_count = status_counts.get('court_disposal', 0)
                         col_status1.metric("✅ Payment Confirmed", paid_count)
                         col_status2.metric("🚨 Payment Pending", pending_count)
                         col_status3.metric("📋 Newly Issued", issued_count)
-                        col_status4.metric("⚖️ Sent to Court", court_count) # NEW: Display court disposal metric
+                        col_status4.metric("⚖️ Sent to Court", court_count)
 
                 # Display results by type
                 if len(otp_df) > 0:
@@ -557,44 +587,38 @@ def csv_processing_interface(parser):
                     st.subheader("💳 Parsed EMI Messages")
                     display_cols = ['emi_amount', 'emi_due_date', 'bank_name', 'account_number', 'confidence_score']
                     available_cols = [col for col in display_cols if col in emi_df.columns]
-                    
-                    # Create a display dataframe with formatted amounts
                     display_emi_df = emi_df[available_cols + ['raw_message']].copy()
                     if 'emi_amount' in display_emi_df.columns:
-                        display_emi_df['emi_amount'] = display_emi_df['emi_amount'].apply(
-                            lambda x: f"₹{x}" if pd.notna(x) else "Not Found"
-                        )
-                    
+                        display_emi_df['emi_amount'] = display_emi_df['emi_amount'].apply(lambda x: f"₹{x}" if pd.notna(x) else "Not Found")
                     st.dataframe(display_emi_df)
 
-                # Enhanced Challan results display
                 if len(challan_df) > 0:
                     st.subheader("🚦 Parsed Traffic Challan Messages")
                     display_cols = ['challan_number', 'vehicle_number', 'fine_amount', 'challan_status', 'traffic_authority', 'confidence_score']
                     available_cols = [col for col in display_cols if col in challan_df.columns]
-                    
-                    # Create a display dataframe with formatted amounts and status
                     display_challan_df = challan_df[available_cols + ['payment_link', 'raw_message']].copy()
                     if 'fine_amount' in display_challan_df.columns:
-                        display_challan_df['fine_amount'] = display_challan_df['fine_amount'].apply(
-                            lambda x: f"₹{x}" if pd.notna(x) else "Not Found"
-                        )
-                    
+                        display_challan_df['fine_amount'] = display_challan_df['fine_amount'].apply(lambda x: f"₹{x}" if pd.notna(x) else "Not Found")
                     st.dataframe(display_challan_df)
 
-                # NEW: Transportation results display
                 if len(transportation_df) > 0:
                     st.subheader("🚀 Parsed Transportation Messages")
-                    # NEW: Add all new transportation fields to the display columns
-                    display_cols = [
-                        'pnr_number', 'date_of_journey', 'boarding_place', 'drop_place', 
-                        'seat_number', 'class', 'transport_type', 'transport_provider', 
-                        'departure_time', 'flight_number', 'bus_number', 'gate_number', 'platform_number',
-                        'confidence_score'
-                    ]
+                    display_cols = ['pnr_number', 'date_of_journey', 'boarding_place', 'drop_place', 'seat_number', 'class', 'transport_type', 'transport_provider', 'departure_time', 'flight_number', 'bus_number', 'gate_number', 'platform_number', 'confidence_score']
                     available_cols = [col for col in display_cols if col in transportation_df.columns]
-                    
                     st.dataframe(transportation_df[available_cols + ['raw_message']])
+
+                # NEW: EPF results display
+                if len(epf_df) > 0:
+                    st.subheader("💰 Parsed EPF Messages")
+                    display_cols = ['amount_credited', 'available_balance', 'uan_number', 'account_number', 'confidence_score']
+                    available_cols = [col for col in display_cols if col in epf_df.columns]
+                    display_epf_df = epf_df[available_cols + ['raw_message']].copy()
+                    if 'amount_credited' in display_epf_df.columns:
+                        display_epf_df['amount_credited'] = display_epf_df['amount_credited'].apply(lambda x: f"₹{x}" if pd.notna(x) else "N/A")
+                    if 'available_balance' in display_epf_df.columns:
+                        display_epf_df['available_balance'] = display_epf_df['available_balance'].apply(lambda x: f"₹{x}" if pd.notna(x) else "N/A")
+                    st.dataframe(display_epf_df)
+
 
                 # Show sample rejected messages
                 if len(rejected_df) > 0:
@@ -604,57 +628,33 @@ def csv_processing_interface(parser):
 
                 # Enhanced Download options
                 st.subheader("📥 Download Results")
-                col1, col2, col3, col4, col5 = st.columns(5)
+                cols = st.columns(6)
                 
-                with col1:
+                with cols[0]:
                     if len(parsed_df) > 0:
                         csv = parsed_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="📄 Download All Results",
-                            data=csv,
-                            file_name='all_parsed_messages.csv',
-                            mime='text/csv',
-                        )
-                
-                with col2:
+                        st.download_button(label="📄 All Parsed", data=csv, file_name='all_parsed_messages.csv', mime='text/csv')
+                with cols[1]:
                     if len(otp_df) > 0:
                         otp_csv = otp_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="📱 Download OTP Results",
-                            data=otp_csv,
-                            file_name='otp_messages.csv',
-                            mime='text/csv',
-                        )
-                
-                with col3:
+                        st.download_button(label="📱 OTPs", data=otp_csv, file_name='otp_messages.csv', mime='text/csv')
+                with cols[2]:
                     if len(emi_df) > 0:
                         emi_csv = emi_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="💳 Download EMI Results",
-                            data=emi_csv,
-                            file_name='emi_messages.csv',   
-                            mime='text/csv',
-                        )
-                
-                with col4:
+                        st.download_button(label="💳 EMIs", data=emi_csv, file_name='emi_messages.csv', mime='text/csv')
+                with cols[3]:
                     if len(challan_df) > 0:
                         challan_csv = challan_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="🚦 Download Challan Results",
-                            data=challan_csv,
-                            file_name='traffic_challan_messages.csv',
-                            mime='text/csv',
-                        )
-                
-                with col5:
+                        st.download_button(label="🚦 Challans", data=challan_csv, file_name='traffic_challan_messages.csv', mime='text/csv')
+                with cols[4]:
                     if len(transportation_df) > 0:
                         transport_csv = transportation_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="🚀 Download Transport Results",
-                            data=transport_csv,
-                            file_name='transportation_messages.csv',
-                            mime='text/csv',
-                        )
+                        st.download_button(label="🚀 Transport", data=transport_csv, file_name='transportation_messages.csv', mime='text/csv')
+                with cols[5]: # NEW
+                    if len(epf_df) > 0:
+                        epf_csv = epf_df.to_csv(index=False).encode('utf-8')
+                        st.download_button(label="💰 EPF", data=epf_csv, file_name='epf_messages.csv', mime='text/csv')
+
 
         except Exception as e:
             st.error(f"An error occurred: {e}")
@@ -665,4 +665,4 @@ def main_app():
     main()
 
 if __name__ == "__main__":
-    main_app()  
+    main_app()

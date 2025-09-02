@@ -218,7 +218,7 @@ class EnhancedMessageParser:
             r'(?:allocated\s*)?seats?\s*([A-Z]?\d{1,2}(?:[,\s]*[A-Z]?\d{0,2})*)',
             # Enhanced gate extraction to avoid confusion with seats
             r'gate\s*(\d+)(?:\s*(?:closes|boarding))',  # Only gate with context
-]
+        ]
         
         # FIXED: Enhanced class patterns
         self.class_patterns = [
@@ -245,7 +245,7 @@ class EnhancedMessageParser:
             r'from\s*gate\s*([A-Z0-9]+)\b',
             # Enhanced to avoid confusion with other numbers
             r'(?:boarding\s*from\s*|from\s*)gate\s*(\d+)(?!\s*(?:minutes?|mins?|hours?|hrs?))',
-]
+        ]
         
         # Enhanced departure time patterns
         self.departure_time_patterns = [
@@ -276,7 +276,7 @@ class EnhancedMessageParser:
             # IndiGo and other airline specific patterns
             r'indigo.*?flight\s*(\d+[A-Z]?)',
             r'(?:indigo|spicejet|air\s*india|vistara).*?(\d+[A-Z]?)\s*from',
-]
+        ]
         
         # Mapping for train class abbreviations
         self.train_class_map = {
@@ -458,6 +458,8 @@ class EnhancedMessageParser:
             r'a[/c]*[:\s]*([A-Z0-9]{6,20})(?:\D|$)',
             r'account[:\s]*(\d{6,20})(?:\D|$)',
             r'account[:\s]*([A-Z0-9]{6,20})(?:\D|$)',
+            # For masked account numbers like Ac XX9122
+            r'ac\s*([xX\d]+)\b',
         ]
         
         # --- EMI Message Indicators ---
@@ -496,6 +498,23 @@ class EnhancedMessageParser:
             r'\b(?:special|festive|limited)\s*(?:offer|deal)\b'
         ]
         
+        # --- NEW: EPF Contribution Patterns ---
+        self.epf_indicators = [
+            r'\bepf\b', r'\bepfo\b', r'\buan\b', r'provident\s*fund', r'accumulations'
+        ]
+        self.uan_patterns = [
+            r'uan\s*(?:no\.?|number)?\s*[:\-]?\s*(\b10\d{10}\b)',
+            r'against\s*uan\s*(\b10\d{10}\b)',
+        ]
+        self.epf_amount_patterns = [
+            r'contribution\s*of\s*rs\.?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)',
+            r'rs\.?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s*credited.*epf',
+            r'credited\s*\(trf\)\s*rs\.?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)',
+        ]
+        self.available_balance_patterns = [
+            r'avl\s*bal\s*rs\.?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)'
+        ]
+
         # --- General Keywords & Patterns for Confidence Scoring ---
         self.true_otp_patterns = [
             r'\b(otp|one[- ]?time[- ]?password|verification code|login code|registration code)\b',
@@ -523,6 +542,7 @@ class EnhancedMessageParser:
             'WhatsApp': [r'\bwhatsapp\b'], 'Facebook': [r'\bfacebook\b'],
             'Buddy Loan': [r'\bbuddy\s*loan\b'],  # FIXED: Added Buddy Loan
             'Mobipocket': [r'\bmobipocket\b'],
+            'EPFO': [r'\bepfo\b'], # NEW: Added EPFO
         }
         
         # --- STRONG EXCLUSION PATTERNS for OTP ---
@@ -540,6 +560,7 @@ class EnhancedMessageParser:
         
         # --- Compile all patterns for performance ---
         self._compile_patterns()
+
     def _compile_patterns(self):
         """Compile all regex patterns for better performance"""
         self.compiled_otp_patterns = [re.compile(p, re.IGNORECASE) for p in self.otp_patterns]
@@ -572,6 +593,11 @@ class EnhancedMessageParser:
         self.compiled_departure_time_patterns = [re.compile(p, re.IGNORECASE) for p in self.departure_time_patterns]
         self.compiled_bus_number_patterns = [re.compile(p, re.IGNORECASE) for p in self.bus_number_patterns]
         self.compiled_flight_number_patterns = [re.compile(p, re.IGNORECASE) for p in self.flight_number_patterns]
+        # NEW: EPF pattern compilation
+        self.compiled_epf_indicators = [re.compile(p, re.IGNORECASE) for p in self.epf_indicators]
+        self.compiled_uan_patterns = [re.compile(p, re.IGNORECASE) for p in self.uan_patterns]
+        self.compiled_epf_amount_patterns = [re.compile(p, re.IGNORECASE) for p in self.epf_amount_patterns]
+        self.compiled_available_balance_patterns = [re.compile(p, re.IGNORECASE) for p in self.available_balance_patterns]
 
         # Challan status patterns
         self.compiled_challan_status_patterns = {}
@@ -1546,6 +1572,115 @@ class EnhancedMessageParser:
             'message_preview': clean_message[:100],
         }
 
+    # --- NEW: EPF PARSING METHODS ---
+    def extract_uan_number(self, text: str) -> Optional[str]:
+        """Extract UAN number from EPF messages"""
+        for pattern in self.compiled_uan_patterns:
+            match = pattern.search(text)
+            if match:
+                uan = match.group(1)
+                if len(uan) == 12 and uan.isdigit():
+                    return uan
+        return None
+
+    def extract_epf_amount(self, text: str) -> Optional[str]:
+        """Extract amount from EPF messages"""
+        # First, try specific EPF amount patterns
+        for pattern in self.compiled_epf_amount_patterns:
+            match = pattern.search(text)
+            if match:
+                amount = match.group(1).replace(',', '')
+                try:
+                    if float(amount) > 0:
+                        return amount
+                except (ValueError, IndexError):
+                    continue
+        
+        # Fallback for generic bank credit messages with EPF context
+        if any(ind in text.lower() for ind in ['epf', 'epfo']):
+            generic_credit_pattern = re.compile(r'rs\.?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s*credited', re.IGNORECASE)
+            match = generic_credit_pattern.search(text)
+            if match:
+                amount = match.group(1).replace(',', '')
+                try:
+                    if float(amount) > 0:
+                        return amount
+                except (ValueError, IndexError):
+                    pass
+        return None
+
+    def extract_available_balance(self, text: str) -> Optional[str]:
+        """Extract available balance from bank-related EPF messages"""
+        for pattern in self.compiled_available_balance_patterns:
+            match = pattern.search(text)
+            if match:
+                balance = match.group(1).replace(',', '')
+                try:
+                    if float(balance) >= 0:
+                        return balance
+                except (ValueError, IndexError):
+                    continue
+        return None
+
+    def calculate_epf_confidence_score(self, text: str, sender_name: str = "") -> int:
+        """Calculate confidence score for EPF messages"""
+        score = 0
+        text_lower = text.lower()
+        combined_text = f"{text_lower} {sender_name.lower()}"
+        
+        # Check for strong indicators
+        epf_indicator_count = sum(1 for p in self.compiled_epf_indicators if p.search(combined_text))
+        score += epf_indicator_count * 25
+        
+        # Check if UAN is found (very strong indicator)
+        if self.extract_uan_number(text):
+            score += 50
+        
+        # Check if amount is found
+        if self.extract_epf_amount(text):
+            score += 20
+        
+        # Check for specific keywords
+        if 'contribution' in text_lower:
+            score += 15
+        if 'auto claim' in text_lower or 'transfer' in text_lower:
+            score += 15 # Transfer messages are also important
+        if 'passbook' in text_lower:
+            score += 10
+        
+        # Boost score for "EPFO" sender
+        if 'epfo' in sender_name.lower():
+            score += 30
+            
+        return max(0, min(100, score))
+
+    def parse_epf_message(self, message: str, sender_name: str = "") -> Dict:
+        """Parse EPF contribution and transfer information"""
+        clean_message = self.clean_text(message)
+        combined_text = f"{clean_message} {sender_name}"
+        confidence_score = self.calculate_epf_confidence_score(combined_text, sender_name)
+        
+        if confidence_score >= 40:
+            result = {
+                'status': 'parsed',
+                'message_type': 'epf',
+                'confidence_score': confidence_score,
+                'amount_credited': self.extract_epf_amount(clean_message),
+                'available_balance': self.extract_available_balance(clean_message),
+                'uan_number': self.extract_uan_number(clean_message),
+                'account_number': self.extract_account_number(clean_message),
+                'raw_message': message,
+            }
+            return result
+        
+        return {
+            'status': 'rejected',
+            'message_type': 'epf',
+            'reason': 'Message did not meet the confidence threshold for an EPF message.',
+            'confidence_score': confidence_score,
+            'message_preview': clean_message[:100],
+        }
+
     def parse_single_message(self, message: str, sender_name: str = "", message_type: str = "auto") -> Dict:
         """FIXED: Enhanced single message parsing with better auto-detection"""
         clean_message = self.clean_text(message)
@@ -1557,6 +1692,11 @@ class EnhancedMessageParser:
             otp_score = self.calculate_otp_confidence_score(clean_message, sender_name)
             if otp_score >= 50 and self.extract_otp_code(clean_message):
                 return self.parse_otp_message(message, sender_name)
+
+            # Then check for EPF (EPFO/UAN are strong indicators)
+            epf_score = self.calculate_epf_confidence_score(clean_message, sender_name)
+            if epf_score >= 40:
+                return self.parse_epf_message(message, sender_name)
             
             # Then check for transportation (PNR is a strong indicator)
             if self.extract_pnr_number(clean_message):
@@ -1591,6 +1731,8 @@ class EnhancedMessageParser:
             return self.parse_emi_message(message, sender_name)
         elif message_type == "otp":
             return self.parse_otp_message(message, sender_name)
+        elif message_type == "epf":
+            return self.parse_epf_message(message, sender_name)
         else:
             return {'status': 'error', 'reason': 'Invalid message type specified'}
 
@@ -1653,7 +1795,7 @@ class EnhancedMessageParser:
     # --- REMAINING METHODS (process_csv_file, summary stats, etc.) ---
     def process_csv_file(self, input_file: str, output_file: str = None, message_type: str = "auto") -> Dict:
         """Process CSV file for all message types"""
-        print("Enhanced Message Parser v11.0 - FIXED & OPTIMIZED - Analyzing Messages")
+        print("Enhanced Message Parser v12.0 - EPF ADDED - Analyzing Messages")
         print("=" * 90)
         print("Loading CSV file...")
         start_time = time.time()
@@ -1714,6 +1856,7 @@ class EnhancedMessageParser:
         emi_messages = [msg for msg in parsed_messages if msg.get('message_type') == 'emi']
         challan_messages = [msg for msg in parsed_messages if msg.get('message_type') == 'challan']
         transportation_messages = [msg for msg in parsed_messages if msg.get('message_type') == 'transportation']
+        epf_messages = [msg for msg in parsed_messages if msg.get('message_type') == 'epf'] # NEW
         
         results = {
             'metadata': {
@@ -1724,21 +1867,24 @@ class EnhancedMessageParser:
                 'emi_messages_found': len(emi_messages),
                 'challan_messages_found': len(challan_messages),
                 'transportation_messages_found': len(transportation_messages),
+                'epf_messages_found': len(epf_messages), # NEW
                 'rejected_messages': len(rejected_messages),
                 'detection_rate': round((len(parsed_messages) / total_messages) * 100, 2),
                 'processing_time_minutes': round(parse_time / 60, 2),
-                'parser_version': '11.0_fixed_optimized'
+                'parser_version': '12.0_epf_added'
             },
             'summary_statistics': {
                 'otp_stats': self.generate_otp_summary_stats(otp_messages),
                 'emi_stats': self.generate_emi_summary_stats(emi_messages),
                 'challan_stats': self.generate_challan_summary_stats(challan_messages),
-                'transportation_stats': self.generate_transportation_summary_stats(transportation_messages)
+                'transportation_stats': self.generate_transportation_summary_stats(transportation_messages),
+                'epf_stats': self.generate_epf_summary_stats(epf_messages) # NEW
             },
             'otp_messages': otp_messages,
             'emi_messages': emi_messages,
             'challan_messages': challan_messages,
             'transportation_messages': transportation_messages,
+            'epf_messages': epf_messages, # NEW
             'sample_rejected_messages': rejected_messages[:10]
         }
         
@@ -1746,7 +1892,7 @@ class EnhancedMessageParser:
         
         if output_file is None:
             base_name = input_file.replace('.csv', '')
-            output_file = f"{base_name}_parsed_messages_fixed.json"
+            output_file = f"{base_name}_parsed_messages_epf.json"
         
         print(f"Saving results to: {output_file}")
         try:
@@ -1956,6 +2102,46 @@ class EnhancedMessageParser:
             }
         }
 
+    # NEW: EPF summary statistics
+    def generate_epf_summary_stats(self, epf_messages: List[Dict]) -> Dict:
+        """Generate summary statistics for EPF messages"""
+        if not epf_messages:
+            return {}
+        
+        # Analyze amounts
+        amounts = []
+        for msg in epf_messages:
+            amount_str = msg.get('amount_credited')
+            if amount_str:
+                try:
+                    amount = float(amount_str.replace(',', ''))
+                    amounts.append(amount)
+                except ValueError:
+                    continue
+        
+        confidence_scores = [msg.get('confidence_score', 0) for msg in epf_messages]
+        avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0
+        
+        amount_stats = {}
+        if amounts:
+            amount_stats = {
+                'average_amount': round(sum(amounts) / len(amounts), 2),
+                'min_amount': min(amounts),
+                'max_amount': max(amounts),
+                'total_value': sum(amounts)
+            }
+            
+        return {
+            'total_count': len(epf_messages),
+            'amount_statistics': amount_stats,
+            'quality_metrics': {
+                'average_confidence_score': round(avg_confidence, 2),
+                'messages_with_amount': sum(1 for msg in epf_messages if msg.get('amount_credited')),
+                'messages_with_uan': sum(1 for msg in epf_messages if msg.get('uan_number')),
+                'messages_with_balance': sum(1 for msg in epf_messages if msg.get('available_balance')),
+            }
+        }
+
     def display_parsing_summary(self, results: Dict):
         """Display comprehensive parsing summary"""
         metadata = results['metadata']
@@ -1963,9 +2149,10 @@ class EnhancedMessageParser:
         emi_stats = results.get('summary_statistics', {}).get('emi_stats', {})
         challan_stats = results.get('summary_statistics', {}).get('challan_stats', {})
         transportation_stats = results.get('summary_statistics', {}).get('transportation_stats', {})
+        epf_stats = results.get('summary_statistics', {}).get('epf_stats', {}) # NEW
         
         print("" + "="*90)
-        print("ENHANCED MESSAGE PARSING RESULTS SUMMARY v11.0 (FIXED & OPTIMIZED)")
+        print("ENHANCED MESSAGE PARSING RESULTS SUMMARY v12.0 (EPF ADDED)")
         print("="*90)
         print(f"Total Input Messages: {metadata['total_input_messages']:,}")
         print(f"Total Parsed Messages: {metadata['total_parsed_messages']:,}")
@@ -1973,13 +2160,14 @@ class EnhancedMessageParser:
         print(f"  - EMI Messages Found: {metadata['emi_messages_found']:,}")
         print(f"  - Challan Messages Found: {metadata['challan_messages_found']:,}")
         print(f"  - Transportation Messages Found: {metadata['transportation_messages_found']:,}")
+        print(f"  - EPF Messages Found: {metadata['epf_messages_found']:,}") # NEW
         print(f"Messages Rejected: {metadata['rejected_messages']:,}")
         print(f"Overall Detection Rate: {metadata['detection_rate']}%")
         
         # Display detailed summaries for each type
         if otp_stats and otp_stats.get('total_count', 0) > 0:
             print("\n" + "="*60)
-            print("OTP MESSAGES SUMMARY (FIXED)")
+            print("OTP MESSAGES SUMMARY")
             print("="*60)
             distributions = otp_stats.get('distributions', {})
             quality_metrics = otp_stats.get('quality_metrics', {})
@@ -1991,7 +2179,7 @@ class EnhancedMessageParser:
         
         if emi_stats and emi_stats.get('total_count', 0) > 0:
             print("\n" + "="*60)
-            print("EMI MESSAGES SUMMARY (FIXED)")
+            print("EMI MESSAGES SUMMARY")
             print("="*60)
             distributions = emi_stats.get('distributions', {})
             quality_metrics = emi_stats.get('quality_metrics', {})
@@ -2022,7 +2210,7 @@ class EnhancedMessageParser:
         
         if transportation_stats and transportation_stats.get('total_count', 0) > 0:
             print("\n" + "="*60)
-            print("TRANSPORTATION MESSAGES SUMMARY (FIXED)")
+            print("TRANSPORTATION MESSAGES SUMMARY")
             print("="*60)
             distributions = transportation_stats.get('distributions', {})
             quality_metrics = transportation_stats.get('quality_metrics', {})
@@ -2030,17 +2218,30 @@ class EnhancedMessageParser:
             for transport_type, count in distributions.get('transport_types', {}).items():
                 percentage = (count / transportation_stats['total_count']) * 100
                 print(f"  {transport_type.title()}: {count:,} ({percentage:.1f}%)")
-            print("Data Completeness (Fixed):")
+            print("Data Completeness:")
             print(f"  PNR: {quality_metrics.get('messages_with_pnr', 0)}/{transportation_stats['total_count']}")
             print(f"  Boarding/Drop: {quality_metrics.get('messages_with_boarding_place', 0)}/{quality_metrics.get('messages_with_drop_place', 0)}")
             print(f"  Bus Numbers: {quality_metrics.get('messages_with_bus_number', 0)}")
             print(f"  Flight Numbers: {quality_metrics.get('messages_with_flight_number', 0)}")
+            
+        # NEW: Display EPF Summary
+        if epf_stats and epf_stats.get('total_count', 0) > 0:
+            print("\n" + "="*60)
+            print("EPF MESSAGES SUMMARY")
+            print("="*60)
+            quality_metrics = epf_stats.get('quality_metrics', {})
+            amount_stats = epf_stats.get('amount_statistics', {})
+            if amount_stats:
+                print(f"Average Amount Credited: Rs.{amount_stats.get('average_amount', 0):,.2f}")
+            print(f"Data Completeness:")
+            print(f"  UAN Found: {quality_metrics.get('messages_with_uan', 0)}/{epf_stats['total_count']}")
+            print(f"  Amount Found: {quality_metrics.get('messages_with_amount', 0)}/{epf_stats['total_count']}")
 
     def interactive_message_analyzer(self):
         """Interactive analyzer for all message types"""
-        print("Interactive Message Analyzer v11.0 (FIXED & OPTIMIZED)")
+        print("Interactive Message Analyzer v12.0 (EPF ADDED)")
         print("=" * 70)
-        print("Fixed parsing for OTP, EMI, Traffic Challan & Transportation messages")
+        print("Parsing for OTP, EMI, Challan, Transportation & EPF messages")
         print("Enter messages to analyze (type 'quit' to exit)")
         
         while True:
@@ -2054,12 +2255,12 @@ class EnhancedMessageParser:
                 continue
             
             sender = input("Enter sender name (optional): ").strip()
-            message_type = input("Message type (otp/emi/challan/transportation/auto) [auto]: ").strip().lower()
+            message_type = input("Message type (otp/emi/challan/transportation/epf/auto) [auto]: ").strip().lower()
             
             if not message_type:
                 message_type = "auto"
             
-            print("Detailed Analysis (FIXED):")
+            print("Detailed Analysis:")
             print("-" * 40)
             result = self.parse_single_message(message, sender, message_type)
             
@@ -2093,6 +2294,11 @@ class EnhancedMessageParser:
                     print(f"Flight Number: {result.get('flight_number')}")
                     print(f"Seat Info: {result.get('seat_number')}")
                     print(f"Gate/Platform: {result.get('gate_number') or result.get('platform_number')}")
+                elif result['message_type'] == 'epf':
+                    print(f"Amount Credited: Rs.{result.get('amount_credited')}")
+                    print(f"Available Balance: Rs.{result.get('available_balance')}")
+                    print(f"UAN Number: {result.get('uan_number')}")
+                    print(f"Account Number: {result.get('account_number')}")
             else:
                 print(f"Rejection Reason: {result.get('reason')}")
 
@@ -2101,47 +2307,27 @@ if __name__ == "__main__":
     parser = EnhancedMessageParser()
     
     # Test the fixed examples
-    print("Testing FIXED parsing with problematic examples:")
+    print("Testing EPF parsing with examples:")
     print("="*70)
     
-    # Test OTP message that was failing
-    otp_test = "<#> 7387 is your OTP from Buddy Loan. Do not share this OTP with anyone.p7/ziTtDxCJ"
-    result = parser.parse_single_message(otp_test, "", "auto")
-    print(f"\nOTP Test Result:")
-    print(f"Status: {result['status']}")
-    print(f"Type: {result.get('message_type')}")
-    print(f"Confidence: {result.get('confidence_score')}%")
-    if result['status'] == 'parsed':
-        print(f"OTP Code: {result.get('otp_code')}")
-        print(f"Company: {result.get('company_name')}")
+    # Test EPF contribution message
+    epf_test_1 = "Dear Member, EPF Contribution of Rs. 1321 against UAN 101206072844 for due month 062019 has been received. Passbook will be updated shortly. Regards EPFO"
+    result = parser.parse_single_message(epf_test_1, "EPFO", "auto")
+    print(f"\nEPF Contribution Test Result:")
+    print(json.dumps(result, indent=2))
     
-    # Test EMI message that was failing to extract amount
-    emi_test = "Fusion Microfinance: EMI payment - Click https://a.qbrik.app/p/MGF6sfA to pay Rs.2150 due on 16/07/2024 for A/C #3089560105"
-    result = parser.parse_single_message(emi_test, "", "auto")
-    print(f"\nEMI Test Result:")
-    print(f"Status: {result['status']}")
-    print(f"Type: {result.get('message_type')}")
-    print(f"Confidence: {result.get('confidence_score')}%")
-    if result['status'] == 'parsed':
-        print(f"EMI Amount: Rs.{result.get('emi_amount')}")
-        print(f"Due Date: {result.get('emi_due_date')}")
-        print(f"Bank: {result.get('bank_name')}")
-        print(f"Account: {result.get('account_number')}")
+    # Test EPF transfer message
+    epf_test_2 = "Auto claim to transfer your EPF accumulations from VIRAJ MANPOWER SERVICES to VIRAJ MANPOWER SERVICES has been considered against UAN 101174226149."
+    result = parser.parse_single_message(epf_test_2, "EPFO", "auto")
+    print(f"\nEPF Transfer Test Result:")
+    print(json.dumps(result, indent=2))
     
-    # Test flight message with parsing issues
-    flight_test = "IndiGo: Dear IndiGo Customer, flight 762 from BHO shall be boarding from gate 02. Boarding gate closes 25 mins prior to the departure time. Wish you a pleasant flight. Regards, IndiGo"
-    result = parser.parse_single_message(flight_test, "", "auto")
-    print(f"\nFlight Test Result:")
-    print(f"Status: {result['status']}")
-    print(f"Type: {result.get('message_type')}")
-    print(f"Confidence: {result.get('confidence_score')}%")
-    if result['status'] == 'parsed':
-        print(f"Flight Number: {result.get('flight_number')}")
-        print(f"Boarding Place: {result.get('boarding_place')}")
-        print(f"Drop Place: {result.get('drop_place')}")
-        print(f"Gate: {result.get('gate_number')}")
-        print(f"Seat Info: {result.get('seat_number')}")
+    # Test Bank credit for EPF
+    epf_test_3 = "BOI -  Rs 1053.00 Credited(TRF)EPF MONTHLY JUL24 M143 in your Ac XX9122 on 31-07-2024. .Avl BalRs 6610.16"
+    result = parser.parse_single_message(epf_test_3, "BOI", "auto")
+    print(f"\nEPF Bank Credit Test Result:")
+    print(json.dumps(result, indent=2))
     
     print("\n" + "="*70)
-    print("All issues have been FIXED in version 11.0!")
+    print("EPF Parser added in version 12.0!")
     print("="*70)
