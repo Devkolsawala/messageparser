@@ -5,102 +5,185 @@ import io
 from typing import Dict, List, Optional
 import time
 from datetime import datetime
+import requests
 
 # Note: Make sure the enhanced parser is saved as 'enhanced_parsing.py'
 from enhanced_parsing import EnhancedMessageParser
 
+def get_pnr_status(pnr_number):
+    """Fetch PNR status from IRCTC API"""
+    try:
+        url = "https://irctc1.p.rapidapi.com/api/v2/getPNRStatus"
+        querystring = {"pnrNumber": pnr_number}
+        headers = {
+            "x-rapidapi-key": "599097cf20mshf6d2175c1e80216p1b66b0jsn5ce2d24a94c8",
+            "x-rapidapi-host": "irctc1.p.rapidapi.com"
+        }
+
+        response = requests.get(url, headers=headers, params=querystring, timeout=10)
+
+        if response.status_code == 200:
+            data = response.json()
+            return {"status": True, "data": data.get("data", {}), "raw": data}
+        else:
+            return {"status": False, "message": f"API Error: {response.status_code}"}
+
+    except requests.exceptions.Timeout:
+        return {"status": False, "message": "Request timed out. Please try again."}
+    except requests.exceptions.RequestException as e:
+        return {"status": False, "message": f"Network error: {str(e)}"}
+    except Exception as e:
+        return {"status": False, "message": f"Unexpected error: {str(e)}"}
+
+
+def display_pnr_status(pnr_data):
+    """Display PNR status with detailed train & passenger info"""
+
+    if not pnr_data:
+        st.error("❌ No PNR data available.")
+        return
+
+    success = bool(pnr_data.get("status")) or ("data" in pnr_data and pnr_data.get("data"))
+    if not success:
+        st.error(f"❌ Failed: {pnr_data.get('message', 'Unknown error')}")
+        with st.expander("Raw Debug Info"):
+            st.json(pnr_data)
+        return
+
+    data = pnr_data.get("data", {})
+
+    # ✅ Train Information
+    st.subheader("🚆 Train Information")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Train Name", data.get("train_name", "N/A"))
+    c2.metric("Train No.", data.get("train_number", "N/A"))
+    c3.metric("Class", data.get("class", "N/A"))
+
+    c4, c5, c6 = st.columns(3)
+    c4.metric("Quota", data.get("quota", "N/A"))
+    c5.metric("Journey Date", data.get("journey_date", data.get("date", "N/A")))
+    c6.metric("Duration", data.get("journey_duration", "N/A"))
+
+    # ✅ Station Info
+    st.subheader("🛤️ Route Information")
+    c7, c8 = st.columns(2)
+    boarding = data.get("boarding_station", {})
+    dest = data.get("reservation_upto", {})
+    with c7:
+        st.markdown("**Boarding Station**")
+        st.write(f"{boarding.get('station_name','N/A')} ({boarding.get('station_code','')})")
+        st.write(f"Departure: {boarding.get('departure_time','N/A')} (Day {boarding.get('day_count','-')})")
+    with c8:
+        st.markdown("**Destination Station**")
+        st.write(f"{dest.get('station_name','N/A')} ({dest.get('station_code','')})")
+        st.write(f"Arrival: {dest.get('arrival_time','N/A')} (Day {dest.get('day_count','-')})")
+
+    # ✅ Passenger Info
+    st.subheader("👥 Passenger Details")
+    passengers = data.get("passenger", [])
+    if passengers:
+        df_pass = pd.DataFrame(passengers)
+        # select relevant columns
+        show_cols = ["passengerName", "passengerAge", "bookingStatus", "currentStatus", 
+                     "currentCoachId", "currentBerthNo", "currentBerthCode"]
+        df_show = df_pass[show_cols].rename(columns={
+            "passengerName": "Name",
+            "passengerAge": "Age",
+            "bookingStatus": "Booking Status",
+            "currentStatus": "Current Status",
+            "currentCoachId": "Coach",
+            "currentBerthNo": "Berth No",
+            "currentBerthCode": "Berth Code"
+        })
+        st.dataframe(df_show, use_container_width=True)
+    else:
+        st.info("No passenger details found.")
+
+    # ✅ Raw JSON Expander
+    with st.expander("Raw API JSON"):
+        st.json(pnr_data)
+
+
+
 def main():
     st.set_page_config(
-        page_title="Enhanced Message Parser v11.0 - OTP, EMI, Challan, Transport & EPF",
+        page_title="Enhanced Message Parser v12.0 - OTP, EMI, Challan, Transport & EPF",
         page_icon="💸",
         layout="wide",
         initial_sidebar_state="expanded"
     )
-    
-    st.title("💸 Enhanced Message Parser v11.0")
+
+    st.title("💸 Enhanced Message Parser v12.0")
     st.markdown("**Advanced parser for OTP, EMI, Challan, Transportation, and EPF messages**")
-    st.success("✨ **NEW v11.0**: Added parsing for **EPF Contributions** and transfer messages! 💰")
-    
-    # Initialize the enhanced parser
-    if 'parser' not in st.session_state:
+    st.success("✨ **NEW v12.0**: Transportation parsing simplified to PNR extraction only! 🚂")
+
+    if "parser" not in st.session_state:
         st.session_state.parser = EnhancedMessageParser()
-    
+
     parser = st.session_state.parser
-    
-    # Sidebar navigation
+
     st.sidebar.title("Navigation")
     mode = st.sidebar.radio(
         "Choose analysis mode:",
         ["Single Message Analysis", "CSV File Processing"]
     )
-    
+
     if mode == "Single Message Analysis":
         single_message_interface(parser)
     elif mode == "CSV File Processing":
         csv_processing_interface(parser)
-  
+
 
 def single_message_interface(parser):
     st.header("📱 Single Message Analysis")
-    st.markdown("Test the parser with individual SMS messages for OTP, EMI, Traffic Challan, Transportation, or EPF content.")
-    
-    col1, col2 = st.columns([2, 1])
-    
-    # Use session state to preserve input text across reruns
-    if 'message_text' not in st.session_state:
+
+    if "last_single_result" not in st.session_state:
+        st.session_state.last_single_result = None
+    if "message_text" not in st.session_state:
         st.session_state.message_text = ""
 
-    with col1:
-        # Input fields
-        st.session_state.message_text = st.text_area(
+    with st.form("single_form", clear_on_submit=False):
+        msg = st.text_area(
             "Message Content",
             value=st.session_state.message_text,
             placeholder="Enter the SMS message text here...",
-            height=150,
-            help="Paste the complete SMS message text"
+            height=150
         )
-        
-        sender_name = st.text_input(
-            "Sender Name (Optional)",
-            placeholder="e.g., Google, AXISBK, DL-POLICE, IRCTC, EPFO",
-            help="The sender ID or name from the SMS"
-        )
-        
+        sender_name = st.text_input("Sender Name (Optional)", placeholder="e.g., Google, IRCTC")
         message_type = st.selectbox(
             "Message Type",
-            ["auto", "otp", "emi", "challan", "transportation", "epf"],
-            help="Choose 'auto' for automatic detection, or specify the type"
+            ["auto", "otp", "emi", "challan", "transportation", "epf"]
         )
-        
-        analyze_btn = st.button("🔍 Analyze Message", type="primary")
-    
-    # Analysis results
-    if analyze_btn and st.session_state.message_text.strip():
+        submitted = st.form_submit_button("🔍 Analyze Message")
+
+    if submitted and msg.strip():
         with st.spinner("Analyzing message..."):
-            result = parser.parse_single_message(st.session_state.message_text, sender_name, message_type)
-            
-            st.divider()
-            st.subheader("📊 Analysis Results")
-            
-            confidence = result.get('confidence_score', 0)
-            msg_type = result.get('message_type', 'Unknown')
-            
-            if result['status'] == 'parsed':
-                if msg_type == 'otp':
-                    display_otp_results(result, confidence)
-                elif msg_type == 'emi':
-                    display_emi_results(result, confidence)
-                elif msg_type == 'challan':
-                    display_challan_results(result, confidence)
-                elif msg_type == 'transportation':
-                    display_transportation_results(result, confidence)
-                elif msg_type == 'epf':
-                    display_epf_results(result, confidence)
-            else:
-                st.error(f"❌ **Message Not Classified** (Type: {msg_type}, Confidence: {confidence}%)")
-                st.warning(f"**Reason**: {result.get('reason')}")
-                with st.expander("Message Preview"):
-                    st.text(result.get('message_preview'))
+            st.session_state.message_text = msg
+            st.session_state.last_single_result = parser.parse_single_message(msg, sender_name, message_type)
+
+    result = st.session_state.last_single_result
+    if result:
+        st.divider()
+        st.subheader("📊 Analysis Results")
+        confidence = result.get("confidence_score", 0)
+        msg_type = result.get("message_type", "Unknown")
+
+        if result.get("status") == "parsed":
+            if msg_type == "otp":
+                display_otp_results(result, confidence)
+            elif msg_type == "emi":
+                display_emi_results(result, confidence)
+            elif msg_type == "challan":
+                display_challan_results(result, confidence)
+            elif msg_type == "transportation":
+                display_transportation_results(result, confidence)
+            elif msg_type == "epf":
+                display_epf_results(result, confidence)
+        else:
+            st.error(f"❌ Not Classified (Type: {msg_type}, Confidence: {confidence}%)")
+            st.warning(f"Reason: {result.get('reason')}")
+            with st.expander("Message Preview"):
+                st.text(result.get("message_preview"))
 
 
 def display_otp_results(result, confidence):
@@ -321,89 +404,48 @@ def display_challan_results(result, confidence):
         st.json(result)
 
 def display_transportation_results(result, confidence):
-    """Display Transportation parsing results - UPDATED with new travel details"""
-    transport_type = result.get('transport_type', 'unknown')
+    """Display Transportation parsing results - SIMPLIFIED TO PNR ONLY"""
+    st.info(f"🚂 **Transportation Message Detected** (Confidence: {confidence}%)")
     
-    # Transport type colors and alerts
-    if transport_type == 'train':
-        transport_emoji = "🚂"
-        alert_type = st.info
-    elif transport_type == 'flight':
-        transport_emoji = "✈️"
-        alert_type = st.success
-    elif transport_type == 'bus':
-        transport_emoji = "🚌"
-        alert_type = st.warning
+    # SIMPLIFIED: Only show PNR information
+    st.markdown("##### 🎫 PNR Information")
+    
+    pnr_number = result.get('pnr_number')
+    
+    if pnr_number:
+        st.success(f"**PNR Number Found**: {pnr_number}")
+
+        pnr_key = f"pnr_data_{pnr_number}"
+        if pnr_key not in st.session_state:
+            st.session_state[pnr_key] = None
+
+        # Check PNR button
+        if st.button(f"🔍 Check PNR Status: {pnr_number}", key=f"pnr_check_{pnr_number}"):
+            with st.spinner(f"Fetching PNR status for {pnr_number}..."):
+                st.session_state[pnr_key] = get_pnr_status(pnr_number)
+
+        # Show status if already fetched
+        if st.session_state[pnr_key] is not None:
+            st.divider()
+            st.subheader(f"🚂 PNR Status for {pnr_number}")
+            display_pnr_status(st.session_state[pnr_key])
+
+            # Clear button (no rerun needed)
+            if st.button(f"🗑️ Clear PNR Status", key=f"pnr_clear_{pnr_number}"):
+                st.session_state[pnr_key] = None
     else:
-        transport_emoji = "🚗"
-        alert_type = st.info
+        st.warning("❌ **PNR Number**: Not Found")
     
-    alert_type(f"{transport_emoji} **Transportation Message Detected** (Confidence: {confidence}%)")
-    
-    # Main transportation information
-    st.markdown("##### 🗺️ Route Information")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    col1.metric("PNR Number", result.get('pnr_number') or "Not Found")
-    col2.metric("Date of Journey", result.get('date_of_journey') or "Not Found")
-    col3.metric("Boarding Place", result.get('boarding_place') or "Not Found")
-    col4.metric("Drop Place", result.get('drop_place') or "Not Found")
-
-    # Seat and Class information
+    # SIMPLIFIED: Only show PNR extraction status
     st.divider()
-    st.markdown("##### 💺 Seat & Class Information")
-    col5, col6 = st.columns(2)
-    col5.metric("Seat / Coach", result.get('seat_number') or "Not Found")
-    col6.metric("Class", result.get('class') or "Not Found")
+    st.markdown("##### 📋 Extraction Summary")
     
-    # NEW: Display specific travel details based on transport type
-    st.divider()
-    st.markdown("##### ℹ️ Travel Details")
-    
-    details_cols = st.columns(4)
-    
-    # Flight Number
-    if result.get('flight_number'):
-        details_cols[0].metric("Flight Number", result.get('flight_number'))
-    
-    # Bus Number
-    if result.get('bus_number'):
-        details_cols[0].metric("Bus Number", result.get('bus_number'))
-    
-    # Departure Time
-    if result.get('departure_time'):
-        details_cols[1].metric("Departure Time", result.get('departure_time'))
-
-    # Gate Number (for flights)
-    if result.get('gate_number'):
-        details_cols[2].metric("Boarding Gate", result.get('gate_number'))
-    
-    # Platform Number (for trains)
-    if result.get('platform_number'):
-        details_cols[2].metric("Platform No.", result.get('platform_number'))
-
-    # Service Provider
-    if result.get('transport_provider'):
-        details_cols[3].metric("Provider", result.get('transport_provider'))
-
-    # Information completeness summary
-    st.divider()
-    st.markdown("##### 📋 Extracted Information Summary")
-    
-    info_completeness = []
-    info_completeness.append("✅ PNR" if result.get('pnr_number') else "❌ PNR")
-    info_completeness.append("✅ Journey Date" if result.get('date_of_journey') else "❌ Journey Date")
-    info_completeness.append("✅ Boarding" if result.get('boarding_place') else "❌ Boarding")
-    info_completeness.append("✅ Drop" if result.get('drop_place') else "❌ Drop")
-    info_completeness.append("✅ Seat/Coach" if result.get('seat_number') else "❌ Seat/Coach")
-    info_completeness.append("✅ Class" if result.get('class') else "❌ Class")
-    info_completeness.append("✅ Provider" if result.get('transport_provider') else "❌ Provider")
-    # NEW: Add new fields to completeness check
-    info_completeness.append("✅ Departure Time" if result.get('departure_time') else "❌ Departure Time")
-    info_completeness.append("✅ Travel No." if result.get('flight_number') or result.get('bus_number') else "❌ Travel No.")
-    info_completeness.append("✅ Gate/Platform" if result.get('gate_number') or result.get('platform_number') else "❌ Gate/Platform")
-
-    st.write(" | ".join(info_completeness))
+    if pnr_number:
+        st.write("✅ PNR Number Successfully Extracted")
+        st.info("💡 **Note**: Transportation parsing is now focused on PNR extraction only. Use the PNR status check above to get detailed journey information.")
+    else:
+        st.write("❌ PNR Number Not Found")
+        st.warning("⚠️ This transportation message does not contain a recognizable PNR number.")
     
     with st.expander("Full Raw Output"):
         st.json(result)
@@ -447,222 +489,88 @@ def display_epf_results(result, confidence):
 
 def csv_processing_interface(parser):
     st.header("📊 CSV File Processing")
-    st.markdown("Upload a CSV file with a 'message' column to process in bulk.")
-    
-    uploaded_file = st.file_uploader(
-        "Upload CSV File",
-        type=['csv'],
-        help="CSV should contain a 'message' column and optionally a 'sender_name' column"
-    )
-    
+
+    if "csv_store" not in st.session_state:
+        st.session_state.csv_store = None
+
+    uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
     if uploaded_file:
         try:
             df = pd.read_csv(uploaded_file, dtype=str)
             st.success(f"✅ File uploaded successfully! Found {len(df):,} rows")
-            
-            if 'message' not in df.columns:
+
+            if "message" not in df.columns:
                 st.error("CSV must contain a 'message' column.")
                 return
+            if "sender_name" not in df.columns:
+                df["sender_name"] = ""
 
-            if 'sender_name' not in df.columns:
-                st.warning("⚠️ No 'sender_name' column found. Will proceed without sender information.")
-                df['sender_name'] = ""
-            
             st.dataframe(df.head())
 
-            st.subheader("⚙️ Processing Options")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                message_type = st.selectbox(
-                    "Message Type to Parse",
-                    ["auto", "otp", "emi", "challan", "transportation", "epf"],
-                    help="Choose what type of messages to parse"
-                )
-            
-            with col2:
-                confidence_threshold = st.slider(
-                    "Confidence Threshold", 
-                    min_value=0, 
-                    max_value=100, 
-                    value=40,
-                    help="Minimum confidence score to classify as valid"
-                )
-            
-            if st.button("🚀 Process Messages", type="primary"):
+            with st.form("csv_form", clear_on_submit=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    message_type = st.selectbox("Message Type", ["auto", "otp", "emi", "challan", "transportation", "epf"])
+                with col2:
+                    confidence_threshold = st.slider("Confidence Threshold", 0, 100, 40)
+                csv_submitted = st.form_submit_button("🚀 Process Messages")
+
+            if csv_submitted:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 results = []
                 total_rows = len(df)
-
                 start_time = time.time()
+
                 for i, row in df.iterrows():
-                    result = parser.parse_single_message(row['message'], row.get('sender_name', ''), message_type)
-                    results.append(result)
-                    
+                    results.append(parser.parse_single_message(row["message"], row.get("sender_name", ""), message_type))
                     progress = (i + 1) / total_rows
                     progress_bar.progress(progress)
-                    
-                    elapsed = time.time() - start_time
-                    rate = (i + 1) / elapsed if elapsed > 0 else 0
-                    
                     if (i + 1) % 100 == 0 or i == total_rows - 1:
-                        status_text.text(
-                            f"Processed: {i+1:,}/{total_rows:,} ({progress*100:.1f}%) | "
-                            f"Rate: {rate:.0f} msgs/sec"
-                        )
+                        elapsed = time.time() - start_time
+                        rate = (i + 1) / elapsed if elapsed > 0 else 0
+                        status_text.text(f"Processed: {i+1:,}/{total_rows:,} ({progress*100:.1f}%) | {rate:.0f} msgs/sec")
 
-                st.success(f"Processing complete! Analyzed {total_rows} messages.")
-                
-                # Filter results by confidence threshold
                 results_df = pd.DataFrame(results)
                 parsed_df = results_df[
-                    (results_df['status'] == 'parsed') & 
-                    (results_df['confidence_score'] >= confidence_threshold)
+                    (results_df["status"] == "parsed") &
+                    (results_df["confidence_score"] >= confidence_threshold)
                 ]
                 rejected_df = results_df[
-                    (results_df['status'] == 'rejected') | 
-                    (results_df['confidence_score'] < confidence_threshold)
+                    (results_df["status"] == "rejected") |
+                    (results_df["confidence_score"] < confidence_threshold)
                 ]
-                
-                otp_df = parsed_df[parsed_df['message_type'] == 'otp'] if 'message_type' in parsed_df.columns else pd.DataFrame()
-                emi_df = parsed_df[parsed_df['message_type'] == 'emi'] if 'message_type' in parsed_df.columns else pd.DataFrame()
-                challan_df = parsed_df[parsed_df['message_type'] == 'challan'] if 'message_type' in parsed_df.columns else pd.DataFrame()
-                transportation_df = parsed_df[parsed_df['message_type'] == 'transportation'] if 'message_type' in parsed_df.columns else pd.DataFrame()
-                epf_df = parsed_df[parsed_df['message_type'] == 'epf'] if 'message_type' in parsed_df.columns else pd.DataFrame()
 
-                # Display summary
-                st.subheader("📈 Processing Summary")
-                cols = st.columns(7)
-                cols[0].metric("Total Parsed", f"{len(parsed_df):,}")
-                cols[1].metric("OTP Messages", f"{len(otp_df):,}")
-                cols[2].metric("EMI Messages", f"{len(emi_df):,}")
-                cols[3].metric("Challan Messages", f"{len(challan_df):,}")
-                cols[4].metric("Transport Msgs", f"{len(transportation_df):,}")
-                cols[5].metric("EPF Messages", f"{len(epf_df):,}") # NEW
-                cols[6].metric("Rejected", f"{len(rejected_df):,}")
-                
-                detection_rate = (len(parsed_df) / total_rows) * 100 if total_rows > 0 else 0
-                st.metric("Overall Detection Rate", f"{detection_rate:.2f}%")
-
-                # Enhanced transportation breakdown
-                if len(transportation_df) > 0:
-                    st.subheader("🚀 Transportation Analysis Breakdown")
-                    if 'transport_type' in transportation_df.columns:
-                        type_counts = transportation_df['transport_type'].value_counts()
-                        st.markdown("##### Transportation Type Distribution")
-                        col_transport1, col_transport2, col_transport3 = st.columns(3)
-                        train_count = type_counts.get('train', 0)
-                        flight_count = type_counts.get('flight', 0)
-                        bus_count = type_counts.get('bus', 0)
-                        col_transport1.metric("🚂 Train Bookings", train_count)
-                        col_transport2.metric("✈️ Flight Bookings", flight_count)
-                        col_transport3.metric("🚌 Bus Bookings", bus_count)
-
-                # Enhanced challan status breakdown
-                if len(challan_df) > 0:
-                    st.subheader("🚦 Enhanced Challan Analysis")
-                    if 'challan_status' in challan_df.columns:
-                        status_counts = challan_df['challan_status'].value_counts()
-                        st.markdown("##### Challan Status Breakdown")
-                        col_status1, col_status2, col_status3, col_status4 = st.columns(4)
-                        paid_count = status_counts.get('paid', 0)
-                        pending_count = status_counts.get('pending', 0) 
-                        issued_count = status_counts.get('issued', 0)
-                        court_count = status_counts.get('court_disposal', 0)
-                        col_status1.metric("✅ Payment Confirmed", paid_count)
-                        col_status2.metric("🚨 Payment Pending", pending_count)
-                        col_status3.metric("📋 Newly Issued", issued_count)
-                        col_status4.metric("⚖️ Sent to Court", court_count)
-
-                # Display results by type
-                if len(otp_df) > 0:
-                    st.subheader("📱 Parsed OTP Messages")
-                    display_cols = ['otp_code', 'company_name', 'purpose', 'confidence_score']
-                    available_cols = [col for col in display_cols if col in otp_df.columns]
-                    st.dataframe(otp_df[available_cols + ['raw_message']])
-
-                if len(emi_df) > 0:
-                    st.subheader("💳 Parsed EMI Messages")
-                    display_cols = ['emi_amount', 'emi_due_date', 'bank_name', 'account_number', 'confidence_score']
-                    available_cols = [col for col in display_cols if col in emi_df.columns]
-                    display_emi_df = emi_df[available_cols + ['raw_message']].copy()
-                    if 'emi_amount' in display_emi_df.columns:
-                        display_emi_df['emi_amount'] = display_emi_df['emi_amount'].apply(lambda x: f"₹{x}" if pd.notna(x) else "Not Found")
-                    st.dataframe(display_emi_df)
-
-                if len(challan_df) > 0:
-                    st.subheader("🚦 Parsed Traffic Challan Messages")
-                    display_cols = ['challan_number', 'vehicle_number', 'fine_amount', 'challan_status', 'traffic_authority', 'confidence_score']
-                    available_cols = [col for col in display_cols if col in challan_df.columns]
-                    display_challan_df = challan_df[available_cols + ['payment_link', 'raw_message']].copy()
-                    if 'fine_amount' in display_challan_df.columns:
-                        display_challan_df['fine_amount'] = display_challan_df['fine_amount'].apply(lambda x: f"₹{x}" if pd.notna(x) else "Not Found")
-                    st.dataframe(display_challan_df)
-
-                if len(transportation_df) > 0:
-                    st.subheader("🚀 Parsed Transportation Messages")
-                    display_cols = ['pnr_number', 'date_of_journey', 'boarding_place', 'drop_place', 'seat_number', 'class', 'transport_type', 'transport_provider', 'departure_time', 'flight_number', 'bus_number', 'gate_number', 'platform_number', 'confidence_score']
-                    available_cols = [col for col in display_cols if col in transportation_df.columns]
-                    st.dataframe(transportation_df[available_cols + ['raw_message']])
-
-                # NEW: EPF results display
-                if len(epf_df) > 0:
-                    st.subheader("💰 Parsed EPF Messages")
-                    display_cols = ['amount_credited', 'available_balance', 'uan_number', 'account_number', 'confidence_score']
-                    available_cols = [col for col in display_cols if col in epf_df.columns]
-                    display_epf_df = epf_df[available_cols + ['raw_message']].copy()
-                    if 'amount_credited' in display_epf_df.columns:
-                        display_epf_df['amount_credited'] = display_epf_df['amount_credited'].apply(lambda x: f"₹{x}" if pd.notna(x) else "N/A")
-                    if 'available_balance' in display_epf_df.columns:
-                        display_epf_df['available_balance'] = display_epf_df['available_balance'].apply(lambda x: f"₹{x}" if pd.notna(x) else "N/A")
-                    st.dataframe(display_epf_df)
-
-
-                # Show sample rejected messages
-                if len(rejected_df) > 0:
-                    with st.expander(f"📋 Sample Rejected Messages ({len(rejected_df):,} total)"):
-                        sample_rejected = rejected_df.head(10)[['message_preview', 'reason', 'confidence_score']]
-                        st.dataframe(sample_rejected)
-
-                # Enhanced Download options
-                st.subheader("📥 Download Results")
-                cols = st.columns(6)
-                
-                with cols[0]:
-                    if len(parsed_df) > 0:
-                        csv = parsed_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(label="📄 All Parsed", data=csv, file_name='all_parsed_messages.csv', mime='text/csv')
-                with cols[1]:
-                    if len(otp_df) > 0:
-                        otp_csv = otp_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(label="📱 OTPs", data=otp_csv, file_name='otp_messages.csv', mime='text/csv')
-                with cols[2]:
-                    if len(emi_df) > 0:
-                        emi_csv = emi_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(label="💳 EMIs", data=emi_csv, file_name='emi_messages.csv', mime='text/csv')
-                with cols[3]:
-                    if len(challan_df) > 0:
-                        challan_csv = challan_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(label="🚦 Challans", data=challan_csv, file_name='traffic_challan_messages.csv', mime='text/csv')
-                with cols[4]:
-                    if len(transportation_df) > 0:
-                        transport_csv = transportation_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(label="🚀 Transport", data=transport_csv, file_name='transportation_messages.csv', mime='text/csv')
-                with cols[5]: # NEW
-                    if len(epf_df) > 0:
-                        epf_csv = epf_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(label="💰 EPF", data=epf_csv, file_name='epf_messages.csv', mime='text/csv')
-
+                st.session_state.csv_store = {
+                    "parsed_df": parsed_df,
+                    "rejected_df": rejected_df,
+                    "total_rows": total_rows
+                }
 
         except Exception as e:
-            st.error(f"An error occurred: {e}")
-            st.error("Please check your CSV format and try again.")
+            st.error(f"Error: {e}")
+
+    # always render results if present
+    store = st.session_state.get("csv_store")
+    if store:
+        parsed_df = store["parsed_df"]
+        rejected_df = store["rejected_df"]
+        total_rows = store["total_rows"]
+
+        st.subheader("📈 Processing Summary")
+        st.metric("Total Parsed", f"{len(parsed_df):,}")
+        st.metric("Rejected", f"{len(rejected_df):,}")
+        st.metric("Overall Detection Rate", f"{(len(parsed_df)/total_rows*100):.2f}%")
+
+        # show sample rejected
+        if len(rejected_df) > 0:
+            with st.expander(f"📋 Sample Rejected Messages ({len(rejected_df):,})"):
+                st.dataframe(rejected_df.head(10))
 
 
 def main_app():
     main()
+
 
 if __name__ == "__main__":
     main_app()

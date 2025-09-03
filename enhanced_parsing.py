@@ -51,7 +51,6 @@ class EnhancedMessageParser:
             r'click.*to\s*pay\s*rs\.?\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)',
         ]
         
-        # --- EMI Due Date Patterns ---
         # --- ENHANCED: EMI Due Date Patterns ---
         self.emi_due_date_patterns = [
             # PRIORITY: High-precision patterns for common EMI message formats
@@ -137,8 +136,8 @@ class EnhancedMessageParser:
             r'visit:\s*(https?://[^\s]+)'
         ]
         
-        # --- FIXED: TRANSPORTATION MESSAGE PARSING PATTERNS ---
-        # PNR Patterns for different transportation modes
+        # --- SIMPLIFIED: TRANSPORTATION MESSAGE PARSING PATTERNS ---
+        # PNR Patterns for different transportation modes (ONLY PNR EXTRACTION)
         self.pnr_patterns = [
             r'pnr\s*[:\-]?\s*(\d{10})\b',
             r'pnr\s*(?:number|no)?\s*[:\-]?\s*(\d{10})\b',
@@ -149,174 +148,8 @@ class EnhancedMessageParser:
             r'booking\s*(?:reference|ref)\s*[:\-]?\s*([A-Z0-9]{6,12})\b',
             r'confirmation\s*(?:number|no)\s*[:\-]?\s*([A-Z0-9]{6,12})\b',
         ]
-        
-        # Date of Journey Patterns
-        self.doj_patterns = [
-            r'doj\s*[:\-]?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-            r'dt\s*[:\-]?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-            r'date\s*of\s*journey\s*[:\-]?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-            r'travel\s*date\s*[:\-]?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-            r'journey\s*date\s*[:\-]?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-            r'(\d{1,2}[a-z]{3})\b',
-            r'(\d{1,2}\s*[a-z]{3,9}\s*\d{2,4})',
-            r'doj:\s*(\d{1,2}[-/][a-z]{3}[-/]\d{4}\s*\d{2}:\d{2})',
-            r'(?:\bdoj|boardingdate)\s*[:\-]?\s*(\d{1,2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2,4})\b',
-        ]
-        
-        # FIXED: Enhanced route patterns with better specificity
-        self.route_patterns = [
-            # PRIORITY: High-specificity patterns first
-            r'(?:frm|from)\s+([A-Z]{2,5})\s+to\s+([A-Z]{2,5})\b',
-            r'\b([A-Z]{3})\(T\d?\)[-\s]*([A-Z]{3})',  # Flight routes with terminals
-            r'([A-Z]{3})[-\s]([A-Z]{3})\s*\d{4}[-\s]\d{4}',  # Flight with times
-            # Route patterns with proper city name extraction
-            r'route\s*[:\-]?\s*([A-Z][a-zA-Z\s]{3,25})\s*[-to]\s*([A-Z][a-zA-Z\s]{3,25})',
-            r'from\s+([A-Z][a-zA-Z\s]{3,25})\s+to\s+([A-Z][a-zA-Z\s]{3,25})',
-            r'dep[:\s]+([A-Z][a-zA-Z\s]{3,25})\s+arr[:\s]+([A-Z][a-zA-Z\s]{3,25})',
-            # FIXED: Be more careful with generic patterns - avoid single words
-            r'\b([A-Z]{3,5})[-\s]([A-Z]{3,5})\b(?!\s*(?:shall|from|to|gate|boarding))',
-        ]
-        
-        # FIXED: Enhanced boarding place patterns - avoid single words
-        self.boarding_place_patterns = [
-            # High priority: specific patterns with context
-            r'boarding\s*(?:station|point)?\s*(?:is|:)?\s*([a-zA-Z\s\d]{4,30}?)\s*-\s*([A-Z]{3,5})',
-            r'boarding\s*(?:at|from|:)\s*([a-zA-Z\s,]{4,30}?)(?:\s*at\s*\d{2}:\d{2})',
-            r'dep[:\s]+([A-Z][a-zA-Z\s]{3,25})',
-            r'departure[:\s]+([A-Z][a-zA-Z\s]{3,25})',
-            r'pickup[:\s]+([A-Z][a-zA-Z\s]{3,25})',
-            r'boarding\s*point[:\s]*([A-Z][a-zA-Z\s,]{4,30})',
-            # FIXED: Airport code extraction with proper context
-            r'flight\s*\d+\s*from\s*([A-Z]{3})\b',
-        ]
-        
-        self.drop_place_patterns = [
-            r'destination\s*(?:station|point)?\s*(?:is|:)?\s*([a-zA-Z\s\d]{4,30}?)\s*-\s*([A-Z]{3,5})',
-            r'arrival\s*at\s*([a-zA-Z\s,]{4,30})',
-            r'arr[:\s]+([A-Z][a-zA-Z\s]{3,25})',
-            r'arrival[:\s]+([A-Z][a-zA-Z\s]{3,25})',
-            r'drop[:\s]+([A-Z][a-zA-Z\s]{3,25})',
-            r'dropping\s*point[:\s]*([A-Z][a-zA-Z\s,]{4,30})',
-        ]
-        
-        # FIXED: Enhanced seat information patterns
-        # ENHANCED: Enhanced seat information patterns with better specificity
-        self.seat_patterns = [
-            # Flight seat patterns - more specific with better context filtering
-            r'seat\s*(?:no\.?|nos\.?)?[:\s]*([A-Z]?\d{1,3}[A-Z]?)(?:\s*,\s*([A-Z]?\d{1,3}[A-Z]?))*\b(?!\s*(?:from|shall|gate|closes|mins|prior))',
-            r'seats?\s*([A-Z]?\d{1,3}[A-Z]?(?:[,\s]+[A-Z]?\d{1,3}[A-Z]?)*)\b(?!\s*(?:from|shall|gate|closes|mins|prior))',
-            # Train seat patterns with enhanced specificity
-            r'\b(?:CNF|WL|RAC)/([A-Z0-9]+)/([\d,\s&]+)\b',
-            r'P\d[-]([A-Z0-9]+)[,]([\d,\s&]+)\b',
-            r',\s*([A-Z0-9]{1,4})\s+([\d,\s&]+)\b',
-            r'\b([A-Z0-9]{1,4})[,]\s*([\d]+)\b',
-            r'(?:coach|trn)\s*[:\-]?\s*([A-Z0-9]+)\s*[,]\s*(?:berth|seat)\s*[:\-]?\s*([\d,\s&]+)\b',
-            r'\b([A-Z]+\d+)\s*[,]\s*([\d,\s]+)[,]\s*(?:SL|3A|2A|1A|CC|2S)\b',
-            r'berth\s*[:\-]?\s*([A-Z0-9,\s]+)\b',
-            # Bus seat patterns
-            r'bus.*?seat\s*(?:no\.?)?[:\s]*([A-Z0-9,\s-]+)',
-            r'(?:allocated\s*)?seats?\s*([A-Z]?\d{1,2}(?:[,\s]*[A-Z]?\d{0,2})*)',
-            # Enhanced gate extraction to avoid confusion with seats
-            r'gate\s*(\d+)(?:\s*(?:closes|boarding))',  # Only gate with context
-        ]
-        
-        # FIXED: Enhanced class patterns
-        self.class_patterns = [
-            r'\b(2S)\b',
-            r'\b(SL|3A|2A|1A|CC)\b',
-            r'(?:class|cl|cls)\s*[:\-]?\s*([A-Z\s/]+)\b',
-            r'\b(Sleeper|AC\s*3\s*Tier|AC\s*2\s*Tier|AC\s*First\s*Class|AC\s*Chair\s*Car)\b',
-            r'\b(Economy|Business|First\s*Class)\b',
-            r'\b(A/C\s*Sleeper|Non\s*A/C\s*Seater)\b',
-            r'\b(AC|Non-AC|Sleeper|Semi-Sleeper|Seater)\b'
-        ]
-        
-        # Enhanced Platform and Gate patterns
-        self.platform_patterns = [
-            r'\b(?:platform|plat|pf)\s*(?:no\.?|number)?\s*[:\-]?\s*([A-Z]?\d{1,2})\b'
-        ]
-        
-        # Enhanced Gate patterns with better context specificity
-        self.gate_patterns = [
-            # ENHANCED: More specific gate patterns with better context
-            r'\bgate\s*(?:no\.?|number)?\s*[:\-]?\s*([A-Z0-9]+)(?:\s*(?:closes|boarding|departure))?',
-            r'boarding\s*(?:from\s*)?gate\s*(?:no\.?)?\s*([A-Z0-9]+)\b',
-            r'gate\s*([A-Z0-9]+)(?:\.\s*boarding|\s*shall\s*be)',
-            r'from\s*gate\s*([A-Z0-9]+)\b',
-            # Enhanced to avoid confusion with other numbers
-            r'(?:boarding\s*from\s*|from\s*)gate\s*(\d+)(?!\s*(?:minutes?|mins?|hours?|hrs?))',
-        ]
-        
-        # Enhanced departure time patterns
-        self.departure_time_patterns = [
-            r'dp\s*[:\-]?\s*(\d{1,2}:\d{2})',
-            r'departure\s*[:\-]?\s*(\d{1,2}:\d{2})',
-            r'boarding\s*at\s*(\d{1,2}:\d{2})',
-            r'(\d{2}:\d{2})[-\s](?:\d{2}:\d{2})\s*hrs?',
-            r'dep\s*[:\-]?\s*(\d{1,2}:\d{2})',
-        ]
-        
-        # Enhanced bus number patterns
-        self.bus_number_patterns = [
-            r'bus\s*no\.?\s*[:\-]?\s*([A-Z0-9-]+)',
-            r'vehicle\s*no\.?\s*[:\-]?\s*([A-Z0-9-]+)',
-            r'bus\s*number\s*[:\-]?\s*([A-Z0-9-]+)',
-            r'service\s*no\.?\s*[:\-]?\s*([A-Z0-9-]+)',
-        ]
-        
-        # Enhanced flight number patterns with better specificity
-        self.flight_number_patterns = [
-            # ENHANCED: More precise flight number patterns
-            r'flight\s*(?:no\.?\s*)?(\d+[A-Z]?)\b',  # flight 762, flight no 123A
-            r'flight\s*([A-Z]{2}\s*\d+)\b',  # flight AI 123
-            r'(\d+[A-Z]?)\s*from\s*[A-Z]{3}',  # 762 from BHO
-            r'([A-Z]{2}\s*\d+[A-Z]?)\s*from',  # AI 762A from
-            r'flight\s*number\s*[:\-]?\s*([A-Z0-9]+)',
-            r'([A-Z]{2}-?\d+[A-Z]?)\b(?!\s*(?:gate|mins|hours?))',  # AI-762, 6E123 (excluding gate numbers)
-            # IndiGo and other airline specific patterns
-            r'indigo.*?flight\s*(\d+[A-Z]?)',
-            r'(?:indigo|spicejet|air\s*india|vistara).*?(\d+[A-Z]?)\s*from',
-        ]
-        
-        # Mapping for train class abbreviations
-        self.train_class_map = {
-            'SL': 'Sleeper', '3A': 'AC 3 Tier', 'B': 'AC 3 Tier',
-            '2A': 'AC 2 Tier', 'A': 'AC 2 Tier', '1A': 'AC First Class', 'H': 'AC First Class',
-            'CC': 'AC Chair Car', 'C': 'AC Chair Car', 'S': 'Sleeper', '2S': 'Second Seating',
-            'SLEEPER CLASS': 'Sleeper', 'THIRD AC': 'AC 3 Tier'
-        }
-        
-        # Transportation Service Providers
-        self.transport_providers = {
-            'Train': [
-                r'\birctc\b', r'\bindian\s*railway?\b', r'\brailway\b',
-                r'train\s*no\s*[:\-]?\s*\d+', r'trn\s*[:\-]?\s*\d+',
-                r'chart\s*prepared', r'pnr\s*[:\-]?\s*\d{10}',
-                r'qr\s*code.*indianrail'
-            ],
-            'Flight': [
-                r'\bindigo\b', r'\bspicejet\b', r'\bair\s*india\b', r'\bvistara\b',
-                r'\bgoair\b', r'\bakasa\s*air\b', r'\bjet\s*airways\b',
-                r'flight\s*\d+[A-Z]?', r'\d+[A-Z]?\s*from', r'web\s*check[-\s]in',
-                r'terminal\s*[T]?\d', r'departure.*arrival', r'boarding',
-                r'gate\s*\d+', r'boarding\s*gate'
-            ],
-            'Bus': [
-                r'\bksrtc\b', r'\bmsrtc\b', r'\btsrtc\b', r'\bapsrtc\b',
-                r'\brstc\b', r'\bupsrtc\b', r'\bmksrtc\b',
-                r'bus\s*no\s*[:\-]?\s*[A-Z0-9]+', r'crew\s*mobile',
-                r'happy\s*journey', r'bus\s*pnr',
-                r'\bambay\b', r'\bmb\s*travels\b', r'\bmadhav\b', r'\bsanjeev\b', r'\bshree\b'
-            ]
-        }
-        
-        # Time patterns for transportation (generic)
-        self.time_patterns = [
-            r'(\d{2}:\d{2})[-\s](\d{2}:\d{2})\s*hrs?',
-            r'(\d{1,2}:\d{2})',
-        ]
-        
-        # Transportation specific indicators
+                
+        # Transportation specific indicators (only for detection)
         self.transportation_indicators = [
             r'\bpnr\b', r'\bdoj\b', r'\btrn\b', r'\bdt\b',
             r'\bflight\b', r'\btrain\b', r'\bbus\b',
@@ -578,21 +411,10 @@ class EnhancedMessageParser:
         self.compiled_challan_fine_patterns = [re.compile(p, re.IGNORECASE) for p in self.challan_fine_patterns]
         self.compiled_payment_link_patterns = [re.compile(p, re.IGNORECASE) for p in self.payment_link_patterns]
         self.compiled_challan_indicators = [re.compile(p, re.IGNORECASE) for p in self.challan_indicators]
-        # Transportation pattern compilation
+        # Transportation pattern compilation - SIMPLIFIED
         self.compiled_pnr_patterns = [re.compile(p, re.IGNORECASE) for p in self.pnr_patterns]
-        self.compiled_doj_patterns = [re.compile(p, re.IGNORECASE) for p in self.doj_patterns]
-        self.compiled_route_patterns = [re.compile(p, re.IGNORECASE) for p in self.route_patterns]
-        self.compiled_boarding_place_patterns = [re.compile(p, re.IGNORECASE) for p in self.boarding_place_patterns]
-        self.compiled_drop_place_patterns = [re.compile(p, re.IGNORECASE) for p in self.drop_place_patterns]
-        self.compiled_seat_patterns = [re.compile(p, re.IGNORECASE) for p in self.seat_patterns]
-        self.compiled_class_patterns = [re.compile(p, re.IGNORECASE) for p in self.class_patterns]
-        self.compiled_time_patterns = [re.compile(p, re.IGNORECASE) for p in self.time_patterns]
         self.compiled_transportation_indicators = [re.compile(p, re.IGNORECASE) for p in self.transportation_indicators]
-        self.compiled_platform_patterns = [re.compile(p, re.IGNORECASE) for p in self.platform_patterns]
-        self.compiled_gate_patterns = [re.compile(p, re.IGNORECASE) for p in self.gate_patterns]
-        self.compiled_departure_time_patterns = [re.compile(p, re.IGNORECASE) for p in self.departure_time_patterns]
-        self.compiled_bus_number_patterns = [re.compile(p, re.IGNORECASE) for p in self.bus_number_patterns]
-        self.compiled_flight_number_patterns = [re.compile(p, re.IGNORECASE) for p in self.flight_number_patterns]
+       
         # NEW: EPF pattern compilation
         self.compiled_epf_indicators = [re.compile(p, re.IGNORECASE) for p in self.epf_indicators]
         self.compiled_uan_patterns = [re.compile(p, re.IGNORECASE) for p in self.uan_patterns]
@@ -614,17 +436,13 @@ class EnhancedMessageParser:
         self.compiled_traffic_authority_patterns = {}
         for authority, patterns in self.traffic_authority_patterns.items():
             self.compiled_traffic_authority_patterns[authority] = [re.compile(p, re.IGNORECASE) for p in patterns]
-        # Transportation provider patterns
-        self.compiled_transport_providers = {}
-        for provider, patterns in self.transport_providers.items():
-            self.compiled_transport_providers[provider] = [re.compile(p, re.IGNORECASE) for p in patterns]
 
     def clean_text(self, text: str) -> str:
         """Clean the input text"""
         if pd.isna(text): return ""
         return str(text).strip()
 
-    # --- TRANSPORTATION PARSING METHODS ---
+    # --- SIMPLIFIED TRANSPORTATION PARSING METHODS (PNR ONLY) ---
 
     def extract_pnr_number(self, text: str) -> Optional[str]:
         """Extract PNR number from transportation messages"""
@@ -652,336 +470,8 @@ class EnhancedMessageParser:
             return True
         return False
 
-    def extract_date_of_journey(self, text: str) -> Optional[str]:
-        """Extract date of journey from transportation messages"""
-        for pattern in self.compiled_doj_patterns:
-            match = pattern.search(text)
-            if match:
-                date_str = match.group(1)
-                return self.normalize_transport_date(date_str)
-        return None
-
-    def normalize_transport_date(self, date_str: str) -> str:
-        """Normalize various date formats to standard format"""
-        date_str = date_str.strip().replace('|', '')
-        # Handle DD-Mon-YYYY format e.g., 01-Jun-2024
-        try:
-            dt_obj = datetime.strptime(date_str, '%d-%b-%Y')
-            return dt_obj.strftime('%d-%m-%Y')
-        except ValueError:
-            pass
-        # Handle DD-Mon-YY format e.g., 04-Feb-24
-        try:
-            dt_obj = datetime.strptime(date_str, '%d-%b-%y')
-            return dt_obj.strftime('%d-%m-%Y')
-        except ValueError:
-            pass
-        # Handle formats like 14Nov
-        if re.match(r'^\d{1,2}[a-z]{3}', date_str, re.IGNORECASE):
-            return date_str
-        # Handle DD-MM-YY or DD/MM/YY formats
-        date_match = re.match(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})', date_str)
-        if date_match:
-            day, month, year = date_match.groups()
-            if len(year) == 2:
-                year = "20" + year
-            return f"{day.zfill(2)}-{month.zfill(2)}-{year}"
-        # Handle date-time formats like 08-Jun-2024 18:15
-        datetime_match = re.match(r'^(\d{1,2}[-/][a-z]{3}[-/]\d{4})\s*(\d{2}:\d{2})', date_str, re.IGNORECASE)
-        if datetime_match:
-            return datetime_match.group(0)
-        return date_str
-
-    # FIXED: Enhanced boarding place extraction with better validation
-    def extract_boarding_place(self, text: str) -> Optional[str]:
-        """FIXED: Enhanced boarding place extraction for all transport types"""
-        # First, try flight-specific patterns for airport codes
-        flight_from_match = re.search(r'flight\s*\d+\s*from\s*([A-Z]{3})\b', text, re.IGNORECASE)
-        if flight_from_match:
-            return flight_from_match.group(1)
-        
-        # Then, try high-precision route patterns for codes
-        for pattern in self.compiled_route_patterns:
-            match = pattern.search(text)
-            if match and match.group(1) not in ['FROM', 'TO', 'GATE', 'SHALL']:  # FIXED: Exclude bad matches
-                place = match.group(1).strip()
-                if len(place) >= 3 and place not in ['from', 'shall', 'gate']:  # FIXED: Better validation
-                    return place
-        
-        # Then, try patterns with keywords like "boarding", "departure", "pickup"
-        for pattern in self.compiled_boarding_place_patterns:
-            match = pattern.search(text)
-            if match:
-                place = match.group(1).strip()
-                # FIXED: Clean and validate
-                place = re.sub(r'^(dep|departure|boarding|pickup)[:\s]*', '', place, flags=re.IGNORECASE)
-                place = re.sub(r'\s*-\s*[A-Z]{2,5}', '', place)  # Remove trailing codes
-                if len(place) >= 3 and place.lower() not in ['from', 'shall', 'gate', 'to']:  # FIXED: Better exclusions
-                    return place[:30].strip()
-        return None
-
-    # FIXED: Enhanced drop place extraction with better validation
-    def extract_drop_place(self, text: str) -> Optional[str]:
-        """FIXED: Enhanced drop place extraction for all transport types"""
-        # First, try high-precision route patterns for codes
-        for pattern in self.compiled_route_patterns:
-            match = pattern.search(text)
-            if match and match.lastindex >= 2:
-                place = match.group(2).strip()
-                if len(place) >= 3 and place.lower() not in ['from', 'shall', 'gate', 'to']:  # FIXED: Better validation
-                    return place
-        
-        # Then, try patterns with keywords like "destination", "arrival", "drop"
-        for pattern in self.compiled_drop_place_patterns:
-            match = pattern.search(text)
-            if match:
-                place = match.group(1).strip()
-                # Clean and return the best match
-                place = re.sub(r'^(arr|arrival|destination|drop)[:\s]*', '', place, flags=re.IGNORECASE)
-                place = re.sub(r'\s*-\s*[A-Z]{2,5}', '', place)  # Remove trailing codes
-                if len(place) >= 3 and place.lower() not in ['from', 'shall', 'gate', 'to']:  # FIXED: Better exclusions
-                    return place[:30].strip()
-        return None
-
-    def extract_transport_provider(self, text: str, sender_name: str = "") -> Optional[str]:
-        """Extract transportation service provider from message"""
-        combined_text = f"{text.lower()} {sender_name.lower()}"
-        
-        # Check for specific providers
-        for provider_type, patterns in self.compiled_transport_providers.items():
-            if any(p.search(combined_text) for p in patterns):
-                # Try to get more specific provider name
-                if provider_type == 'Train':
-                    if 'irctc' in combined_text:
-                        return 'IRCTC'
-                    elif 'indian railway' in combined_text:
-                        return 'Indian Railway'
-                    else:
-                        return 'Railway'
-                elif provider_type == 'Flight':
-                    # Extract specific airline
-                    airlines = ['indigo', 'spicejet', 'air india', 'vistara', 'goair', 'akasa air']
-                    for airline in airlines:
-                        if airline in combined_text:
-                            return airline.title()
-                    return 'Airline'
-                elif provider_type == 'Bus':
-                    # Extract specific bus service
-                    bus_services = ['ksrtc', 'msrtc', 'tsrtc', 'apsrtc', 'rsrtc', 'upsrtc', 'mksrtc']
-                    for service in bus_services:
-                        if service in combined_text:
-                            return service.upper()
-                    # Check for specific bus operators
-                    bus_operators = {
-                        'ambay': 'Ambay Travels', 'mb travels': 'M B Travels', 
-                        'madhav': 'Madhav Travels', 'sanjeev': 'Sanjeev Travels', 
-                        'shree': 'Shree Travels'
-                    }
-                    for operator, name in bus_operators.items():
-                        if operator in combined_text:
-                            return name
-                    return 'Bus Service'
-        return None
-
-    # FIXED: Enhanced seat information extraction with better filtering
-    def extract_seat_info(self, text: str) -> Optional[str]:
-        """ENHANCED: Enhanced seat, coach, and berth information extraction with improved context filtering"""
-        all_seats = []
-        
-        # Search for seat patterns across the entire text
-        for pattern in self.compiled_seat_patterns:
-            matches = pattern.finditer(text)
-            for match in matches:
-                # Extract groups and clean them
-                groups = [group.strip().rstrip('.,;') for group in match.groups() if group and group.strip()]
-                # ENHANCED: Better filtering with context awareness
-                for seat in groups:
-                    # Skip if it's clearly not a seat (enhanced exclusions)
-                    if seat.lower() in ['from', 'shall', 'gate', 'to', 'mins', 'prior', 'closes', 'boarding', 'departure', 'time', 'flight']:
-                        continue
-                    
-                    # Skip if it's a time pattern (HH:MM format)
-                    if re.match(r'^\d{1,2}:\d{2}', seat):
-                        continue
-                    
-                    # Enhanced gate number detection - if "gate" appears nearby, it's likely a gate number, not a seat
-                    match_start = match.start()
-                    match_end = match.end()
-                    context_before = text[max(0, match_start-20):match_start].lower()
-                    context_after = text[match_end:match_end+20].lower()
-                    
-                    if ('gate' in context_before or 'gate' in context_after) and seat.isdigit() and len(seat) <= 2:
-                        continue  # Skip gate numbers that are mistaken for seats
-                    
-                    # Enhanced validation for reasonable seat formats
-                    if len(seat.strip()) > 0 and not seat.isspace():
-                        # For flight seats, expect alphanumeric format (e.g., 12A, 15F) or pure numbers
-                        if re.match(r'^[A-Z]?\d{1,3}[A-Z]?$', seat) or re.match(r'^[\d,\s&]+$', seat):
-                            all_seats.append(seat)
-                        # For train seats, allow complex formats
-                        elif re.match(r'^[A-Z0-9,\s&]+$', seat) and len(seat) <= 20:
-                            all_seats.append(seat)
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_seats = []
-        for seat in all_seats:
-            if seat not in seen and len(seat.strip()) > 0:
-                seen.add(seat)
-                unique_seats.append(seat)
-        
-        # ENHANCED: Return combined seat info with better validation
-        if unique_seats:
-            # Additional filtering for obviously wrong entries
-            filtered_seats = []
-            for seat in unique_seats:
-                # Skip if it contains common non-seat words
-                if not any(word in seat.lower() for word in ['from', 'shall', 'gate', 'boarding', 'closes', 'mins', 'prior', 'departure', 'time']):
-                    # Skip standalone numbers that are likely not seats in flight context
-                    if seat.isdigit() and len(seat) <= 2 and 'flight' in text.lower():
-                        # Check if this number appears with "gate" context
-                        if f'gate {seat}' in text.lower() or f'gate{seat}' in text.lower():
-                            continue
-                    filtered_seats.append(seat)
-            
-            return ", ".join(filtered_seats) if filtered_seats else None
-        return None
-
-    def extract_class_info(self, text: str, transport_type: str) -> Optional[str]:
-        """Enhanced travel class information extraction"""
-        potential_matches = []
-        for pattern in self.compiled_class_patterns:
-            match = pattern.search(text)
-            if match:
-                class_candidate = match.group(1).upper().strip()
-                # FIXED: Skip invalid class matches
-                if class_candidate.lower() not in ['oses', 'from', 'shall', 'gate', 'mins']:
-                    potential_matches.append(class_candidate)
-
-        if not potential_matches:
-             return None
-
-        class_info = potential_matches[0]
-
-        if transport_type == 'train':
-            return self.train_class_map.get(class_info, class_info.title())
-        elif transport_type == 'bus':
-            # Enhanced bus class mapping
-            bus_class_map = {
-                'AC': 'AC', 'NON-AC': 'Non-AC', 'SLEEPER': 'Sleeper',
-                'SEMI-SLEEPER': 'Semi-Sleeper', 'SEATER': 'Seater'
-            }
-            return bus_class_map.get(class_info, class_info.title())
-        return class_info.title()
-
-    def extract_platform_number(self, text: str) -> Optional[str]:
-        """Extract platform number for train messages"""
-        for pattern in self.compiled_platform_patterns:
-            match = pattern.search(text)
-            if match:
-                return match.group(1).strip().upper()
-        return None
-
-    def extract_gate_number(self, text: str) -> Optional[str]:
-        """ENHANCED: Enhanced gate number extraction for flight messages with better context awareness"""
-        text_lower = text.lower()
-        
-        # Enhanced gate extraction with context validation
-        for pattern in self.compiled_gate_patterns:
-            match = pattern.search(text)
-            if match:
-                gate_num = match.group(1).strip().upper()
-                
-                # Enhanced validation: ensure it's actually a gate context
-                match_start = match.start()
-                match_end = match.end()
-                context_before = text[max(0, match_start-30):match_start].lower()
-                context_after = text[match_end:match_end+30].lower()
-                
-                # Strong gate indicators in context
-                gate_indicators = ['boarding', 'departure', 'closes', 'flight', 'terminal']
-                has_gate_context = any(indicator in context_before or indicator in context_after 
-                                    for indicator in gate_indicators)
-                
-                # Validate gate number format (typically 1-3 characters)
-                if len(gate_num) <= 3 and has_gate_context:
-                    return gate_num
-                elif 'gate' in text_lower and len(gate_num) <= 3:
-                    # If "gate" is explicitly mentioned, it's likely a gate number
-                    return gate_num
-        
-        return None
-
-    def extract_departure_time(self, text: str) -> Optional[str]:
-        """Enhanced departure time extraction"""
-        for pattern in self.compiled_departure_time_patterns:
-            match = pattern.search(text)
-            if match:
-                time_str = match.group(1).strip()
-                # Basic validation: check if it looks like HH:MM
-                if re.match(r'^\d{1,2}:\d{2}', time_str):
-                    return time_str
-        return None
-
-    def extract_bus_number(self, text: str) -> Optional[str]:
-        """Extract bus number from bus messages"""
-        for pattern in self.compiled_bus_number_patterns:
-            match = pattern.search(text)
-            if match:
-                bus_num = match.group(1).strip()
-                # Basic validation
-                if len(bus_num) >= 2 and any(c.isalnum() for c in bus_num):
-                    return bus_num
-        return None
-
-    def extract_flight_number(self, text: str) -> Optional[str]:
-        """Extract flight number from flight messages"""
-        for pattern in self.compiled_flight_number_patterns:
-            match = pattern.search(text)
-            if match:
-                flight_num = match.group(1).strip()
-                # Basic validation for flight number format
-                if re.match(r'^[A-Z]*\d+[A-Z]?', flight_num) or re.match(r'^[A-Z]{2}\s*\d+', flight_num):
-                    return flight_num
-        return None
-
-    def determine_transport_type(self, text: str, sender_name: str = "") -> str:
-        """Determine the type of transportation (train/flight/bus)"""
-        combined_text = f"{text.lower()} {sender_name.lower()}"
-        
-        # Count indicators for each transport type
-        train_score = sum(1 for p in self.compiled_transport_providers['Train'] if p.search(combined_text))
-        flight_score = sum(1 for p in self.compiled_transport_providers['Flight'] if p.search(combined_text))
-        bus_score = sum(1 for p in self.compiled_transport_providers['Bus'] if p.search(combined_text))
-        
-        # Additional scoring based on PNR format
-        pnr = self.extract_pnr_number(text)
-        if pnr:
-            if len(pnr) == 10 and pnr.isdigit():
-                train_score += 2
-            elif len(pnr) == 6:
-                flight_score += 2
-            elif 8 <= len(pnr) <= 12:
-                bus_score += 1
-        
-        # Check for specific service provider names (high priority)
-        if any(provider in combined_text for provider in ['ambay', 'mb travels', 'madhav']):
-            bus_score += 5
-            
-        # Check for flight-specific indicators
-        if any(indicator in combined_text for indicator in ['gate', 'boarding gate', 'terminal']):
-            flight_score += 3
-            
-        # Check for train-specific indicators
-        if any(indicator in combined_text for indicator in ['platform', 'coach', 'berth']):
-            train_score += 3
-        
-        # Return the type with highest score
-        scores = {'train': train_score, 'flight': flight_score, 'bus': bus_score}
-        return max(scores, key=scores.get) if max(scores.values()) > 0 else 'unknown'
-
     def calculate_transportation_confidence_score(self, text: str, sender_name: str = "") -> int:
-        """Calculate confidence score for transportation messages"""
+        """Calculate confidence score for transportation messages - SIMPLIFIED"""
         score = 0
         combined_text = f"{text.lower()} {sender_name.lower()}"
         
@@ -989,39 +479,12 @@ class EnhancedMessageParser:
         transport_indicator_count = sum(1 for p in self.compiled_transportation_indicators if p.search(combined_text))
         score += transport_indicator_count * 8
         
-        # Check if PNR is found
+        # Check if PNR is found (main indicator)
         if self.extract_pnr_number(text):
-            score += 25
-        
-        # Check if date of journey is found
-        if self.extract_date_of_journey(text):
-            score += 20
-        
-        # Check if route information is found
-        if self.extract_boarding_place(text) and self.extract_drop_place(text):
-            score += 15
-        elif self.extract_boarding_place(text) or self.extract_drop_place(text):
-            score += 10
-        
-        # Check if transport provider is identified
-        if self.extract_transport_provider(text, sender_name):
-            score += 10
-        
-        # Check for seat and class info
-        if self.extract_seat_info(text):
-            score += 10
-        if self.extract_class_info(text, self.determine_transport_type(text, sender_name)):
-            score += 5
-        
-        # Check for transport-specific numbers
-        transport_type = self.determine_transport_type(text, sender_name)
-        if transport_type == 'bus' and self.extract_bus_number(text):
-            score += 10
-        elif transport_type == 'flight' and self.extract_flight_number(text):
-            score += 10
+            score += 50  # Higher weight since PNR is the primary extraction
         
         # Additional keywords that indicate transportation
-        transport_keywords = ['booking', 'confirmation', 'ticket', 'journey', 'travel', 'platform', 'gate', 'terminal']
+        transport_keywords = ['booking', 'confirmation', 'ticket', 'journey', 'travel']
         keyword_matches = sum(1 for keyword in transport_keywords if keyword in combined_text)
         score += keyword_matches * 5
         
@@ -1039,57 +502,20 @@ class EnhancedMessageParser:
         if self.extract_pnr_number(text):
             return True
         
-        # Check for transport providers
-        for provider_type, patterns in self.compiled_transport_providers.items():
-            if any(p.search(combined_text) for p in patterns):
-                return True
         return False
 
     def parse_transportation_message(self, message: str, sender_name: str = "") -> Dict:
-        """Parse transportation information from the message"""
+        """Parse transportation information from the message - SIMPLIFIED TO PNR ONLY"""
         clean_message = self.clean_text(message)
         combined_text = f"{clean_message} {sender_name}"
         confidence_score = self.calculate_transportation_confidence_score(combined_text, sender_name)
 
         if confidence_score >= 40:  # Threshold for transportation messages
-            transport_type = self.determine_transport_type(clean_message, sender_name)
-
-            # Initialize fields
-            platform_number = None
-            gate_number = None
-            departure_time = None
-            bus_number = None
-            flight_number = None
-
-            # Extract fields based on transport type
-            if transport_type == 'train':
-                platform_number = self.extract_platform_number(clean_message)
-            elif transport_type == 'flight':
-                gate_number = self.extract_gate_number(clean_message)
-                flight_number = self.extract_flight_number(clean_message)
-            elif transport_type == 'bus':
-                bus_number = self.extract_bus_number(clean_message)
-
-            # Extract departure time (applicable to all)
-            departure_time = self.extract_departure_time(clean_message)
-
             result = {
                 'status': 'parsed',
                 'message_type': 'transportation',
-                'transport_type': transport_type,
                 'confidence_score': confidence_score,
-                'pnr_number': self.extract_pnr_number(clean_message),
-                'date_of_journey': self.extract_date_of_journey(clean_message),
-                'boarding_place': self.extract_boarding_place(clean_message),
-                'drop_place': self.extract_drop_place(clean_message),
-                'seat_number': self.extract_seat_info(clean_message),
-                'class': self.extract_class_info(clean_message, transport_type),
-                'platform_number': platform_number,
-                'gate_number': gate_number,
-                'departure_time': departure_time,
-                'bus_number': bus_number,
-                'flight_number': flight_number,
-                'transport_provider': self.extract_transport_provider(clean_message, sender_name),
+                'pnr_number': self.extract_pnr_number(clean_message),            
                 'raw_message': message,
             }
             return result
@@ -2048,57 +1474,21 @@ class EnhancedMessageParser:
         }
 
     def generate_transportation_summary_stats(self, transportation_messages: List[Dict]) -> Dict:
-        """Generate summary statistics for transportation messages"""
+        """Generate summary statistics for transportation messages - SIMPLIFIED"""
         if not transportation_messages:
             return {}
-        
-        # Transport type distribution
-        transport_types = [msg.get('transport_type') for msg in transportation_messages if msg.get('transport_type')]
-        type_counts = {}
-        for transport_type in transport_types:
-            type_counts[transport_type] = type_counts.get(transport_type, 0) + 1
-        
-        # Provider distribution
-        providers = [msg.get('transport_provider') for msg in transportation_messages if msg.get('transport_provider')]
-        provider_counts = {}
-        for provider in providers:
-            provider_counts[provider] = provider_counts.get(provider, 0) + 1
-        
-        # Route analysis
-        boarding_places = [msg.get('boarding_place') for msg in transportation_messages if msg.get('boarding_place')]
-        boarding_counts = {}
-        for place in boarding_places:
-            boarding_counts[place] = boarding_counts.get(place, 0) + 1
-        
-        drop_places = [msg.get('drop_place') for msg in transportation_messages if msg.get('drop_place')]
-        drop_counts = {}
-        for place in drop_places:
-            drop_counts[place] = drop_counts.get(place, 0) + 1
         
         confidence_scores = [msg.get('confidence_score', 0) for msg in transportation_messages]
         avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0
         
         return {
             'total_count': len(transportation_messages),
-            'distributions': {
-                'transport_types': dict(sorted(type_counts.items(), key=lambda x: x[1], reverse=True)),
-                'top_providers': dict(sorted(provider_counts.items(), key=lambda x: x[1], reverse=True)[:10]),
-                'top_boarding_places': dict(sorted(boarding_counts.items(), key=lambda x: x[1], reverse=True)[:10]),
-                'top_drop_places': dict(sorted(drop_counts.items(), key=lambda x: x[1], reverse=True)[:10]),
-            },
             'quality_metrics': {
                 'average_confidence_score': round(avg_confidence, 2),
                 'high_confidence_messages': sum(1 for score in confidence_scores if score >= 80),
                 'medium_confidence_messages': sum(1 for score in confidence_scores if 50 <= score < 80),
                 'low_confidence_messages': sum(1 for score in confidence_scores if score < 50),
                 'messages_with_pnr': sum(1 for msg in transportation_messages if msg.get('pnr_number')),
-                'messages_with_doj': sum(1 for msg in transportation_messages if msg.get('date_of_journey')),
-                'messages_with_boarding_place': sum(1 for msg in transportation_messages if msg.get('boarding_place')),
-                'messages_with_drop_place': sum(1 for msg in transportation_messages if msg.get('drop_place')),
-                'messages_with_provider': sum(1 for msg in transportation_messages if msg.get('transport_provider')),
-                'messages_with_departure_time': sum(1 for msg in transportation_messages if msg.get('departure_time')),
-                'messages_with_bus_number': sum(1 for msg in transportation_messages if msg.get('bus_number')),
-                'messages_with_flight_number': sum(1 for msg in transportation_messages if msg.get('flight_number')),
             }
         }
 
@@ -2210,19 +1600,10 @@ class EnhancedMessageParser:
         
         if transportation_stats and transportation_stats.get('total_count', 0) > 0:
             print("\n" + "="*60)
-            print("TRANSPORTATION MESSAGES SUMMARY")
+            print("TRANSPORTATION MESSAGES SUMMARY (PNR ONLY)")
             print("="*60)
-            distributions = transportation_stats.get('distributions', {})
             quality_metrics = transportation_stats.get('quality_metrics', {})
-            print("Transportation Types:")
-            for transport_type, count in distributions.get('transport_types', {}).items():
-                percentage = (count / transportation_stats['total_count']) * 100
-                print(f"  {transport_type.title()}: {count:,} ({percentage:.1f}%)")
-            print("Data Completeness:")
-            print(f"  PNR: {quality_metrics.get('messages_with_pnr', 0)}/{transportation_stats['total_count']}")
-            print(f"  Boarding/Drop: {quality_metrics.get('messages_with_boarding_place', 0)}/{quality_metrics.get('messages_with_drop_place', 0)}")
-            print(f"  Bus Numbers: {quality_metrics.get('messages_with_bus_number', 0)}")
-            print(f"  Flight Numbers: {quality_metrics.get('messages_with_flight_number', 0)}")
+            print(f"PNR Found: {quality_metrics.get('messages_with_pnr', 0)}/{transportation_stats['total_count']}")
             
         # NEW: Display EPF Summary
         if epf_stats and epf_stats.get('total_count', 0) > 0:
@@ -2286,14 +1667,7 @@ class EnhancedMessageParser:
                     print(f"Fine Amount: Rs.{result.get('fine_amount')}")
                     print(f"Status: {result.get('challan_status')}")
                 elif result['message_type'] == 'transportation':
-                    print(f"Transport Type: {result.get('transport_type')}")
                     print(f"PNR Number: {result.get('pnr_number')}")
-                    print(f"Boarding Place: {result.get('boarding_place')}")
-                    print(f"Drop Place: {result.get('drop_place')}")
-                    print(f"Bus Number: {result.get('bus_number')}")
-                    print(f"Flight Number: {result.get('flight_number')}")
-                    print(f"Seat Info: {result.get('seat_number')}")
-                    print(f"Gate/Platform: {result.get('gate_number') or result.get('platform_number')}")
                 elif result['message_type'] == 'epf':
                     print(f"Amount Credited: Rs.{result.get('amount_credited')}")
                     print(f"Available Balance: Rs.{result.get('available_balance')}")
@@ -2328,6 +1702,13 @@ if __name__ == "__main__":
     print(f"\nEPF Bank Credit Test Result:")
     print(json.dumps(result, indent=2))
     
+    # Test Transportation message (PNR only)
+    transport_test = "Your PNR 1234567890 for Train 12345 is confirmed. Journey date: 15/12/2024 from Delhi to Mumbai. Seat: A1/25. Platform: 5"
+    result = parser.parse_single_message(transport_test, "IRCTC", "auto")
+    print(f"\nTransportation Test Result (PNR Only):")
+    print(json.dumps(result, indent=2))
+    
     print("\n" + "="*70)
-    print("EPF Parser added in version 12.0!")
+    print("Enhanced Parser v12.0 - Fixed transport_providers error!")
+    print("Transportation parsing simplified to PNR extraction only.")
     print("="*70)
